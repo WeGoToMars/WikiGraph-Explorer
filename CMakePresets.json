@@ -1,0 +1,148 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug",
+      "displayName": "Debug (macOS/Linux)",
+      "description": "Debug build with sanitizers and debug symbols",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS_DEBUG": "-fsanitize=address -fno-omit-frame-pointer -g3 -Wall -Wextra",
+        "CMAKE_C_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g3 -Wall -Wextra",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "CPR_USE_SYSTEM_CURL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "environment": {
+        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:print_stacktrace=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:abort_on_error=1",
+        "TSAN_OPTIONS": "halt_on_error=1"
+      },
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "profile",
+      "displayName": "Profiling (macOS/Linux)",
+      "description": "Profiling build with -O3 optimization and debug symbols",
+      "binaryDir": "${sourceDir}/build/profile",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-g3 -fno-omit-frame-pointer -march=native -mtune=native -O3 -ffast-math -funroll-loops -fstrict-aliasing",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "-g3 -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "-g3",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "CPR_USE_SYSTEM_CURL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "release",
+      "displayName": "Release (macOS/Linux)",
+      "description": "Release build with -O3 optimization",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "-Wall -Wextra -Wpedantic -O3 -flto=thin -ffast-math -funroll-loops -fstrict-aliasing -DNDEBUG",
+        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "-flto=thin",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "CPR_USE_SYSTEM_CURL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "vcpkg-msvc-debug",
+      "displayName": "VCPKG MSVC Debug",
+      "description": "Windows debug build with MSVC, debug symbols, and sanitizers",
+      "binaryDir": "${sourceDir}/build/vcpkg-msvc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_FLAGS_DEBUG": "/DEBUG /Zi /RTC1 /W3 /fsanitize=address /fsanitize=undefined",
+        "CMAKE_EXE_LINKER_FLAGS_DEBUG": "",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "CPR_USE_SYSTEM_CURL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "vcpkg-msvc-release",
+      "displayName": "VCPKG MSVC Release",
+      "description": "Windows release build with MSVC and maximum optimization",
+      "binaryDir": "${sourceDir}/build/vcpkg-msvc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS_RELEASE": "/Ob2 /Ox /GL /Gy /Gw /fp:fast /W3",
+        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "/LTCG /OPT:REF /OPT:ICF",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "CPR_USE_SYSTEM_CURL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "vcpkg-msvc-debug",
+      "configurePreset": "vcpkg-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vcpkg-msvc-release",
+      "configurePreset": "vcpkg-msvc-release",
+      "configuration": "Release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "profile",
+      "configurePreset": "profile",
+      "configuration": "RelWithDebInfo"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "vcpkg-msvc-debug",
+      "configurePreset": "vcpkg-msvc-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "vcpkg-msvc-release",
+      "configurePreset": "vcpkg-msvc-release",
+      "configuration": "Release"
+    }
+  ]
+} 

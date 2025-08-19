@@ -1,0 +1,34 @@
+#pragma once
+
+// Unified hashmap interface for both std::unordered_map and alternative hashmap implementations
+// Configurable to use either std::unordered_map or emhash6/8 with CMake
+
+#cmakedefine USE_STD_UNORDERED_MAP // NOLINT(pp_invalid_directive)
+
+#ifdef USE_STD_UNORDERED_MAP
+#include <unordered_map>
+
+template <typename K, typename V, typename Backend = void>
+using Hashmap = std::unordered_map<K, V>;
+#else
+#include <hash_table6.hpp>
+#include <hash_table8.hpp>
+
+enum class EmhashImpl : uint8_t { emhash6, emhash8 };
+
+template <typename K, typename V, EmhashImpl Backend = EmhashImpl::emhash6>
+struct HashmapSelector;
+
+template <typename K, typename V> 
+struct HashmapSelector<K, V, EmhashImpl::emhash6> {
+  using type = emhash6::HashMap<K, V>;
+};
+
+template <typename K, typename V> 
+struct HashmapSelector<K, V, EmhashImpl::emhash8> {
+  using type = emhash8::HashMap<K, V>;
+};
+
+template <typename K, typename V, EmhashImpl Backend = EmhashImpl::emhash6>
+using Hashmap = typename HashmapSelector<K, V, Backend>::type;
+#endif

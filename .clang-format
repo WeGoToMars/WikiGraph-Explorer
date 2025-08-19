@@ -1,0 +1,15 @@
+BasedOnStyle: Google
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortFunctionsOnASingleLine: Empty
+BreakBeforeBraces: Attach
+NamespaceIndentation: None
+IncludeBlocks: Regroup
+SortIncludes: true
+ReflowComments: true
+Cpp11BracedListStyle: true
+SpaceBeforeParens: ControlStatements
