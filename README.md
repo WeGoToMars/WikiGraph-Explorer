@@ -1,7 +1,7 @@
 # WikiGraph Explorer
 Explore any Wikipedia as an interconnected graph of articles!
 
-Inspired by https://github.com/jwngr/sdow, written in C++ for blazing fast performance 🔥! This tool supports multithreading and takes advantage of most modern C++23 features.
+Inspired by https://github.com/jwngr/sdow, written in C++ for blazing fast performance 🔥! This tool supports multithreading to go *as fast as possible* and takes advantage of modern C++23 features.
 
 ## Supported features:
 - **Find all shortest paths between two pages** (like https://www.sixdegreesofwikipedia.com/)
@@ -52,9 +52,6 @@ For more details on the dump formats, see: https://meta.wikimedia.org/wiki/Data_
 ## Alternative hashmap implementations
 By default, this project uses [emhash](https://github.com/ktprime/emhash) as a higher-performance hashmap for internal data structures. If you prefer to use the standard C++ `std::unordered_map` instead, you can switch by setting a CMake option:
 
-- To use `std::unordered_map`:
-  ```
-  cmake .. -DUSE_STD_UNORDERED_MAP=ON --preset release
-  ```
+- To use `std::unordered_map` use `-DUSE_STD_UNORDERED_MAP=ON` option with `cmake`.
 
 Only files that include `src/Utils/Hashmap.h` will be recompiled when toggling this option, so switching is fast.
