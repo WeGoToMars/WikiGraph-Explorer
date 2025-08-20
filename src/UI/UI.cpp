@@ -67,7 +67,7 @@ Elements create_progress_display(const std::string& label, size_t count, double 
 
     if (progress_ratio >= 0) {
         elements.push_back(hbox(
-            {text(std::format("Read progress: {:.2f} %", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
+            {text(std::format("Progress: {:.2f} %", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
     }
 
     return elements;
@@ -422,9 +422,13 @@ Component create_results_ui(UIState& state) {
                                              : 0.0f;
             float graph_progress_ratio =
                 static_cast<float>(bfs_progress.total_explored_nodes) / static_cast<float>(total_nodes);
-            elements.push_back(hbox({text(std::format("Layer {} progress: {:.1f}%", bfs_progress.current_layer,
-                                                      layer_progress_ratio * 100)),
-                                     text(" "), gauge(layer_progress_ratio)}));
+            if (layer_progress_ratio < 1.0f) {
+                elements.push_back(hbox({text(std::format("Layer {} progress: {:.1f}%", bfs_progress.current_layer,
+                                                          layer_progress_ratio * 100)),
+                                         text(" "), gauge(layer_progress_ratio)}));
+            } else {
+                elements.push_back(text(std::format("Layer {} progress: 100.0%", bfs_progress.current_layer)));
+            }
             elements.push_back(
                 hbox({text(std::format("Total graph traversal progress: {:.1f}%", graph_progress_ratio * 100)),
                       text(" "), gauge(graph_progress_ratio)}));
@@ -504,13 +508,22 @@ Component create_progress_ui(UIState& state) {
                     break;
                 }
                 case UIStage::BuildingGraph: {
+                    auto gb = state.graph_build_progress.load();
+                    float progress_ratio =
+                        gb.total_links > 0 ? static_cast<float>(gb.processed_links) / static_cast<float>(gb.total_links)
+                                           : 0.0f;
                     elements = {create_step_header("Step 4/4", "Building graph..."),
                                 separator(),
                                 text("Loaded pages: " + std::format("{:L}", state.page_count.load())),
                                 text("Loaded link targets: " + std::format("{:L}", state.linktarget_count.load())),
                                 text("Loaded links: " + std::format("{:L}", state.link_count.load())),
-                                text(" "),
-                                create_text("Building...", false, Color::Yellow)};
+                                text(" ")};
+                    auto build_elems = create_progress_display("Edges inserted", gb.processed_links,
+                                                              static_cast<double>(gb.edges_speed), "edges",
+                                                              progress_ratio);
+                    elements.insert(elements.end(), build_elems.begin(), build_elems.end());
+                    elements.push_back(text(" "));
+                    elements.push_back(create_text("Building...", false, Color::Yellow));
                     break;
                 }
                 case UIStage::UserInput:
@@ -542,7 +555,7 @@ Component create_progress_ui(UIState& state) {
 
 Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Component& input_ui, Component& results_ui,
                          Component& progress_ui, UIState& state) {
-    // Create a simple renderer that switches between components based on stage
+    // Create a renderer that switches between components based on stage
     auto main_ui = Renderer([&] {
         switch (state.stage.load()) {
             case UIStage::WikiSelection:

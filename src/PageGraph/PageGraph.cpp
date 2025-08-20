@@ -17,7 +17,7 @@ std::unique_ptr<PageGraph> PageGraph::instance = nullptr;
 std::mutex PageGraph::mtx;
 
 // Constuct page graph from pages and links
-PageGraph::PageGraph(std::vector<Page>&& pages, std::vector<Link>&& links)
+PageGraph::PageGraph(UIState& state, std::vector<Page>&& pages, std::vector<Link>&& links)
     : pages_(std::move(pages)) {  // Move pages for UI access
     // Pages = nodes, Links = edges
     this->adjacency_list.resize(pages_.size());
@@ -37,11 +37,43 @@ PageGraph::PageGraph(std::vector<Page>&& pages, std::vector<Link>&& links)
         adjacency_list[i].reserve(out_links_count[i]);
     }
 
-    // Construct adjacency list
+    // Initialize graph build progress
+    state.graph_build_progress = {
+        .processed_links = 0, .total_links = static_cast<uint64_t>(links_.size()), .edges_speed = 0};
+
+    // Construct adjacency list with periodic UI updates
+    auto start_time = std::chrono::steady_clock::now();
+    auto last_update_time = start_time;
     for (const auto& link : links_) {
         this->adjacency_list[link.page_from].emplace_back(link.page_to);
         this->number_of_links++;
+
+        // throttle UI updates purely by time using the UI state's refresh rate
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_update_time >= UIState::refresh_rate) {
+            auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+            uint32_t speed = elapsed_ms > 0
+                                 ? static_cast<uint32_t>((static_cast<double>(this->number_of_links) * 1000.0) /
+                                                         static_cast<double>(elapsed_ms))
+                                 : 0u;
+            state.graph_build_progress = {.processed_links = this->number_of_links,
+                                          .total_links = static_cast<uint64_t>(links_.size()),
+                                          .edges_speed = speed};
+            post_ui_refresh();
+            last_update_time = now;
+        }
     }
+
+    // Final update
+    auto end_time = std::chrono::steady_clock::now();
+    auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    uint32_t final_speed = total_ms > 0 ? static_cast<uint32_t>((static_cast<double>(this->number_of_links) * 1000.0) /
+                                                                static_cast<double>(total_ms))
+                                        : 0u;
+    state.graph_build_progress = {.processed_links = this->number_of_links,
+                                  .total_links = static_cast<uint64_t>(links_.size()),
+                                  .edges_speed = final_speed};
+    post_ui_refresh();
 
     spdlog::debug("PageGraph constructed with {} pages and {} links", pages_.size(), this->number_of_links);
     // links vector is automatically destroyed when it goes out of scope
@@ -61,11 +93,11 @@ PageGraph& PageGraph::get() {
     return *instance;
 }
 
-void PageGraph::init(std::vector<Page> pages, std::vector<Link> links) {
+void PageGraph::init(UIState& state, std::vector<Page> pages, std::vector<Link> links) {
     std::lock_guard<std::mutex> lock(mtx);
 
     if (!instance) {
-        instance = std::make_unique<PageGraph>(std::move(pages), std::move(links));
+        instance = std::make_unique<PageGraph>(state, std::move(pages), std::move(links));
     }
 }
 

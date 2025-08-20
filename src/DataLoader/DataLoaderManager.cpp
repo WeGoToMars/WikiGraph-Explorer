@@ -94,7 +94,7 @@ void start_loader_thread(UIState& state, std::unique_ptr<DataLoaderManager>& dat
 
         start_time = std::chrono::steady_clock::now();
         // Build the graph with the loaded data
-        PageGraph::init(data_manager->move_pages(), data_manager->move_links());
+        PageGraph::init(state, data_manager->move_pages(), data_manager->move_links());
 
         // Clean up after graph construction
         data_manager->cleanup_after_graph_build();

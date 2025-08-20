@@ -36,12 +36,12 @@ class PageGraph {
     /**
      * @brief Construct the graph from pages and links.
      */
-    PageGraph(std::vector<Page>&& pages, std::vector<Link>&& links);  // constructor
+    PageGraph(UIState& state, std::vector<Page>&& pages, std::vector<Link>&& links);  // constructor
 
     /** @brief Access the singleton graph instance. */
     static PageGraph& get();
-    /** @brief Initialize the singleton with data. */
-    static void init(std::vector<Page> pages, std::vector<Link> links);
+    /** @brief Initialize the singleton with data and update UI progress while building. */
+    static void init(UIState& state, std::vector<Page> pages, std::vector<Link> links);
 
     ~PageGraph();
 

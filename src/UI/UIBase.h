@@ -87,6 +87,14 @@ struct UIState {
     std::atomic<uint32_t> link_speed{0};
     std::atomic<ReadProgress> link_progress{ReadProgress{.total_bytes = 0, .current_bytes = 0}};
 
+    // Graph build progress counters
+    using GraphBuildProgress = struct {
+        uint64_t processed_links;  // number of edges inserted into adjacency list
+        uint64_t total_links;      // total number of edges to insert
+        uint32_t edges_speed;      // edges inserted per second
+    };
+    std::atomic<GraphBuildProgress> graph_build_progress{GraphBuildProgress{0, 0, 0}};
+
     // BFS progress counters
     using bfs_progress_pair = struct {
         uint32_t current_layer;         // current layer of BFS
