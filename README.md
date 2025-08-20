@@ -4,10 +4,13 @@ Explore any Wikipedia as an interconnected graph of articles!
 Inspired by https://github.com/jwngr/sdow, written in C++ for blazing fast performance 🔥! This tool supports multithreading to go *as fast as possible* and takes advantage of modern C++23 features.
 
 ## Supported graph features
-- **Find all shortest paths between two pages** (like https://www.sixdegreesofwikipedia.com/)
+- **Find all shortest paths between two pages** (like https://www.sixdegreesofwikipedia.com/) using BFS and DFS <br>
+  <img width="860" height="179" alt="image" src="https://github.com/user-attachments/assets/8dd3d13c-cab7-4f93-b3c4-883749cd52d0" />
 - More to be added soon!
 
 ## Terminal UI
+This app features a detailed TUI, made with [FTXUI](https://github.com/ArthurSonzogni/FTXUI) that allows for easy file management, benchmarking, and progress tracking.
+
 ### Download the latest Wikipedia dump automatically
 | Select the project from the list | Wait for the download to complete |
 |---|---|
