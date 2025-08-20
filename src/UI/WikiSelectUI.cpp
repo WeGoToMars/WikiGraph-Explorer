@@ -17,7 +17,7 @@
 using namespace ftxui;
 
 std::vector<DownloadedWiki> WikiSelectUIManager::scan_downloaded_wikis() {
-    const std::filesystem::path data_dir = PathUtils::get_data_dir();
+    const std::filesystem::path data_dir = PathUtils::get_resource_dir("data");
 
     spdlog::info("Scanning for downloaded wikis in directory: {}", data_dir.string());
 

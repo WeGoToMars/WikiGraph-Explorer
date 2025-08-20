@@ -10,7 +10,7 @@
 void init_logfile() {
     try {
         PathUtils::ensure_logs_dir_exists();
-        auto log_path = PathUtils::get_logs_dir() / "log.txt";
+        auto log_path = PathUtils::get_resource_dir("logs") / "log.txt";
 
         // Clear the log file if it exists
         if (std::filesystem::exists(log_path)) {

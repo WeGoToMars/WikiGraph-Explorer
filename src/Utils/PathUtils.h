@@ -3,16 +3,11 @@
 
 namespace PathUtils {
 /**
- * @brief Get the data directory path relative to the working directory
- * @return Path to the data directory
+ * @brief Get the resource directory path relative to the working directory
+ * @param folder_name The name of the folder to get the path for
+ * @return Path to the resource directory
  */
-std::filesystem::path get_data_dir();
-
-/**
- * @brief Get the logs directory path relative to the working directory
- * @return Path to the logs directory
- */
-std::filesystem::path get_logs_dir();
+std::filesystem::path get_resource_dir(std::string folder_name);
 
 /**
  * @brief Ensure the data directory exists, creating it if necessary

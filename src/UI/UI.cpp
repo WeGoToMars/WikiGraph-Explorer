@@ -212,7 +212,7 @@ void download(UIState& state, WikiFileType type, std::string url) {
           .filename_suffix = "-linktarget.sql.gz"}}};
 
     const auto& config = configs.at(type);
-    std::filesystem::path full_path = PathUtils::get_data_dir() / (state.selected_wiki_prefix + "wiki-" +
+    std::filesystem::path full_path = PathUtils::get_resource_dir("data") / (state.selected_wiki_prefix + "wiki-" +
                                                                    state.selected_wiki_date + config.filename_suffix);
     download_file(std::move(url), full_path.string(), *config.progress_ptr, UIState::refresh_rate);
     config.complete_ptr->store(true);
@@ -330,7 +330,7 @@ Component create_download_ui(UIState& state, std::function<void()> on_start_load
         if (state.page_download_complete && state.pagelinks_download_complete && state.linktarget_download_complete) {
             // Populate selected_wiki paths for the freshly downloaded files
             if (!state.selected_wiki_prefix.empty() && !state.selected_wiki_date.empty()) {
-                const auto base = PathUtils::get_data_dir();
+                const auto base = PathUtils::get_resource_dir("data");
                 const auto prefix = state.selected_wiki_prefix;
                 const auto date = state.selected_wiki_date;
                 auto make_file = [&](const char* suffix, WikiFileType type) {
