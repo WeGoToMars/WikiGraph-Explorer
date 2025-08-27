@@ -47,9 +47,11 @@ Downloaded files are stored in the `data` directory. If you run the app again, y
 - curl (for downloading Wikipedia dumps)
 - zlib (for decompressing Wikipedia dumps)
 
-This project is using [CMake](https://cmake.org/), and features helpful (debug, profile, release) presets for both Linux/MacOS and Visual Studio on Windows. The dependencies will be automatically fetched with git.
+[git](https://git-scm.com/downloads) must be installed to automatically fetch dependencies.
 
-On Linux and MacOS, run:
+This project is using [CMake](https://cmake.org/), and features helpful (debug, profile, release) presets for both Linux/MacOS and Visual Studio on Windows.
+
+## Linux and MacOS
 1. `git clone https://github.com/WeGoToMars/WikiGraph-Explorer`
 2. `cd WikiGraph-Explorer`
 3. `mkdir build && cd build`
@@ -57,7 +59,19 @@ On Linux and MacOS, run:
 5. `make`
 6. `./wikigraph`
 
-On Windows, use Visual Studio and open the cloned directory as a CMake project. I haven't tested this extensively, more detailed docs will be added in the future.
+## Windows
+Open the cloned directory in Visual Studio 2022 or later. VS should automatically recognize it as a CMake project.
+1. Select `vcpkg-msvc-debug` or `vcpkg-msvc-release` configuration
+    - Windows doesn't have `curl` or `zlib` installed by default. If you see a CMake error about not finding them, you can use [vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/overview) to install both libraries.
+    - Go to Tools -> Command Line -> Developer Powershell
+    - Run:
+      ```
+      vcpkg install
+      ```
+    - If CMake still can't find packages make usre VCPKG_ROOT enviroment variable is set correctly
+2. After CMake has finished running, select startup item wikigraph.exe
+
+
 
 ## Data source
 Wikipedia's compressed dump data is fetched directly from Wikimedia's public servers. The tool automatically downloads the required files for the selected language:

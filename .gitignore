@@ -40,8 +40,12 @@
 # debug information files
 *.dwo
 
+# excluded development folders
 .cache/
-
+.vs/
 build/
+vcpkg_installed
+
+# runtime data
 data/
 logs/

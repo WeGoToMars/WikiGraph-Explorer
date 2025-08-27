@@ -40,7 +40,7 @@ enum class WikiFileType : uint8_t { Page, LinkTarget, PageLinks };
 /**
  * @brief Mapping from file type string tokens to `WikiFileType` enum values.
  */
-static constexpr std::map<std::string, WikiFileType> wiki_file_type_map() {
+static std::map<std::string, WikiFileType> wiki_file_type_map() {
     return {
         {"page", WikiFileType::Page},
         {"linktarget", WikiFileType::LinkTarget},
@@ -96,13 +96,13 @@ struct UIState {
     std::atomic<GraphBuildProgress> graph_build_progress{GraphBuildProgress{0, 0, 0}};
 
     // BFS progress counters
-    using bfs_progress_pair = struct {
+    using bfs_progress_counter = struct {
         uint32_t current_layer;         // current layer of BFS
         uint32_t layer_size;            // number of nodes in current layer
         uint32_t layer_explored_count;  // number of nodes explored in current layer (for layer progress bar)
         uint32_t total_explored_nodes;  // total number of nodes explored (for total progress bar)
     };
-    std::atomic<bfs_progress_pair> bfs_progress{bfs_progress_pair{0, 0, 0, 0}};
+    std::atomic<bfs_progress_counter> bfs_progress{bfs_progress_counter{0, 0, 0, 0}};
     std::atomic<bool> is_searching{false};
 
     // Timing of the different stages of the program (for benchmarking)

@@ -136,9 +136,9 @@ PageGraph::BFSResult PageGraph::bfs_with_parents(UIState& state, uint32_t start_
             layer_explored_count = 0;
 
             state.bfs_progress = {.current_layer = current_layer,
-                                  .total_explored_nodes = total_explored_count,
                                   .layer_size = layer_size,
-                                  .layer_explored_count = layer_explored_count};
+                                  .layer_explored_count = layer_explored_count,
+                                  .total_explored_nodes = total_explored_count};
             spdlog::debug("BFS progress: layer {} ({} nodes), {} nodes explored", current_layer, layer_size,
                           total_explored_count);
 
