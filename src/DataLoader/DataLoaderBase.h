@@ -4,6 +4,7 @@
 #include <functional>
 #include <future>
 #include <string>
+#include <thread>
 
 #ifdef PARALLEL_DECOMPRESSION
 #include "DataLoader/FileReader/ParallelLineReader.h"
@@ -74,7 +75,6 @@ class DataLoaderBase {
      * @param parse_fn Parser for a single INSERT line
      * @param on_result Consumer invoked for every parsed result
      * @param on_first Consumer invoked once with the first result
-     * @param max_concurrent Max concurrent parse tasks (parallel mode only)
      */
     template <typename ParseFn, typename OnResultFn, typename OnFirstFn>
     void parse_insert_lines(ReaderType& reader, ParseFn parse_fn, OnResultFn on_result, OnFirstFn on_first) {
@@ -84,8 +84,9 @@ class DataLoaderBase {
 #ifdef PARALLEL_DECOMPRESSION
         moodycamel::ConcurrentQueue<std::future<decltype(parse_fn(line))>> futures;
         moodycamel::ConsumerToken token(futures);
-        WThreadPool pool(max_concurrent);
-        const size_t max_futures = max_concurrent * 2;
+        const size_t num_threads = std::max(std::thread::hardware_concurrency(), 1u);
+        WThreadPool pool(num_threads);
+        const size_t max_futures = num_threads * 2;
 
         auto drain_one = [&] {
             std::future<decltype(parse_fn(line))> fut;
@@ -131,8 +132,8 @@ class DataLoaderBase {
      * @brief Overload when no first-result handler is needed.
      */
     template <typename ParseFn, typename OnResultFn>
-    void parse_insert_lines(ReaderType& reader, ParseFn parse_fn, OnResultFn on_result, size_t max_concurrent = 4) {
-        parse_insert_lines(reader, parse_fn, on_result, [](const auto&) {}, max_concurrent);
+    void parse_insert_lines(ReaderType& reader, ParseFn parse_fn, OnResultFn on_result) {
+        parse_insert_lines(reader, parse_fn, on_result, [](const auto&) {});
     }
 
     std::unique_ptr<ReaderType> reader_;      // NOLINT (cppcoreguidelines-non-private-member-variables-in-classes)
