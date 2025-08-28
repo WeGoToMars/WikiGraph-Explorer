@@ -171,7 +171,7 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
     auto menu = Menu(&ui_manager->get_wiki_names(), &state.selected_wiki_index);
 
     // Add event handling
-    auto menu_with_events = CatchEvent(menu, [&state, ui_manager, &on_wiki_selected](const Event& event) {
+    auto menu_with_events = CatchEvent(menu, [&state, ui_manager, on_wiki_selected](const Event& event) {
         auto* screen = ScreenInteractive::Active();
         if (event.character() == "q") {
             if (screen) {

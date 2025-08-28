@@ -63,7 +63,7 @@ void AsyncLineReader::read_lines() {
     } else {
         std::vector<char> buffer(1 << 16);  // 64 KB buffer
         std::string pending_line;
-        pending_line.reserve(1 << 20);  // Wikipedia dumps have 2^20 =1 MB lines
+        pending_line.reserve(1 << 20);  // Wikipedia dumps have 2^20 = 1 MB lines
 
         while (true) {
             int bytes_read = gzread(gz_file_, buffer.data(), static_cast<unsigned int>(buffer.size()));
