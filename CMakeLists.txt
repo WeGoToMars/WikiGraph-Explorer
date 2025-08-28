@@ -21,7 +21,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/Utils/Hashmap.h.in ${CMAKE_CURREN
 
 # Parallel decompression and loading of wikipedia dumps
 option(PARALLEL_DECOMPRESSION "Use parallel decompression of wikipedia dumps" OFF)
-set(PARALLEL_DECOMPRESSION ON CACHE BOOL "Use parallel decompression of wikipedia dumps" FORCE)
+set(PARALLEL_DECOMPRESSION OFF CACHE BOOL "Use parallel decompression of wikipedia dumps" FORCE)
 
 # Terminal UI Library
 include(FetchContent)
@@ -59,14 +59,9 @@ if(PARALLEL_DECOMPRESSION)
   )
   FetchContent_MakeAvailable(concurrentqueue)
 else()
-  # simple zlib wrapper for reading gzipped wikipedia dumps
-  FetchContent_Declare(ZStr
-    GIT_REPOSITORY    "https://github.com/mateidavid/zstr" 
-    GIT_TAG           "v1.0.7"
-  )
-  FetchContent_MakeAvailable(ZStr)
-
-  message(STATUS "Using standard zlib")
+  # Require zlib >= 1.2.9 for gzoffset
+  find_package(ZLIB 1.2.9 REQUIRED)
+  message(STATUS "Using system zlib")
 endif()
 
 # libcurl wrapper for downloading wikipedia dumps
@@ -109,19 +104,17 @@ target_include_directories(wikigraph SYSTEM PRIVATE ${spdlog_SOURCE_DIR}/include
 if(PARALLEL_DECOMPRESSION)
   target_include_directories(wikigraph SYSTEM PRIVATE ${rapidgzip_SOURCE_DIR}/src)
   target_include_directories(wikigraph SYSTEM PRIVATE ${concurrentqueue_SOURCE_DIR})
-else()
-  target_include_directories(wikigraph SYSTEM PRIVATE ${zstr_SOURCE_DIR}/src)
 endif()
 
 if(NOT USE_STD_UNORDERED_MAP)
   target_include_directories(wikigraph SYSTEM PRIVATE ${emhash_SOURCE_DIR})
 endif()
 
-# Link rapidgzip if enabled (must be linked before zstr to override system zlib)
+# Link rapidgzip if enabled
 if(PARALLEL_DECOMPRESSION)
   target_link_libraries(wikigraph PRIVATE librapidgzip)
 else()
-  target_link_libraries(wikigraph PRIVATE zstr)
+  target_link_libraries(wikigraph PRIVATE ZLIB::ZLIB)
 endif()
 
 target_link_libraries(wikigraph PRIVATE

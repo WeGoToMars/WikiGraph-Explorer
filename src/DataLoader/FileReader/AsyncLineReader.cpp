@@ -3,10 +3,11 @@
 #include "AsyncLineReader.h"
 
 #include <filesystem>
+#include <vector>
 
 #include "spdlog/spdlog.h"
 
-AsyncLineReader::AsyncLineReader(const WikiFile& file) : file_(file), total_bytes_(0), zstr_stream_(nullptr) {
+AsyncLineReader::AsyncLineReader(const WikiFile& file) : file_(file), total_bytes_(0), gz_file_(nullptr) {
     calculate_total_bytes();
     initialize_reader();
 
@@ -17,6 +18,10 @@ AsyncLineReader::AsyncLineReader(const WikiFile& file) : file_(file), total_byte
 AsyncLineReader::~AsyncLineReader() {
     if (reader_thread_.joinable()) {
         reader_thread_.join();
+    }
+    if (gz_file_ != nullptr) {
+        gzclose(gz_file_);
+        gz_file_ = nullptr;
     }
 }
 
@@ -38,53 +43,89 @@ ReadProgress AsyncLineReader::get_progress() {
 }
 
 void AsyncLineReader::calculate_total_bytes() {
-    // Use compressed file size for progress tracking to match compressed position
-    // tracking
+    // Use compressed file size for progress tracking
     total_bytes_ = std::filesystem::file_size(file_.data_path);
 }
 
 void AsyncLineReader::initialize_reader() {
-    zstr_stream_ = std::make_unique<zstr::ifstream>(file_.data_path.string());
-
-    if (!zstr_stream_->good()) {
-        spdlog::error("Failed to open file with ifstream: {}", file_.data_path.string());
+    gz_file_ = gzopen(file_.data_path.string().c_str(), "rb");
+    if (gz_file_ == nullptr) {
+        spdlog::error("Failed to open gzip file: {}", file_.data_path.string());
+        return;
     }
-
-    spdlog::info("Successfully initialized ifstream reader for: {}", file_.data_path.string());
+    gzbuffer(gz_file_, 1 << 20);  // 2^20 = 1 MB buffer
+    spdlog::info("Successfully initialized zlib gzip reader for: {}", file_.data_path.string());
 }
 
 void AsyncLineReader::read_lines() {
-    std::string line;
+    if (gz_file_ == nullptr) {
+        spdlog::error("No valid gzip file available for reading");
+    } else {
+        std::vector<char> buffer(1 << 16);  // 64 KB buffer
+        std::string pending_line;
+        pending_line.reserve(1 << 20);  // Wikipedia dumps have 2^20 =1 MB lines
 
-    try {
-        std::istream* stream = nullptr;
+        while (true) {
+            int bytes_read = gzread(gz_file_, buffer.data(), static_cast<unsigned int>(buffer.size()));
+            if (bytes_read < 0) {  // Decompression/read error
+                int errnum = 0;
+                const char* errstr = gzerror(gz_file_, &errnum);
+                spdlog::error("Error reading gzip file: {} (err {}): {}", file_.data_path.string(), errnum,
+                              (errstr ? errstr : "unknown"));
+                break;
+            }
+            if (bytes_read == 0) {
+                // EOF
+                break;
+            }
 
-        if (zstr_stream_) {
-            stream = zstr_stream_.get();
-        } else {
-            spdlog::error("No valid stream available for reading");
-            return;
+            // Scan the chunk for newlines
+            int start_index = 0;
+            for (int i = 0; i < bytes_read; i++) {
+                if (buffer[static_cast<size_t>(i)] == '\n') {  // found the newline
+                    pending_line.append(buffer.data() + start_index, static_cast<size_t>(i - start_index));
+
+                    std::unique_lock<std::mutex> lock(mutex_);
+                    cv_.wait(lock, [this] { return queue_.size() < MAX_QUEUE_SIZE; });
+                    queue_.push(std::move(pending_line));
+                    pending_line.clear();
+
+                    // compressed-position update for UI progress
+                    // gzoffset reports the current location in the compressed stream
+                    z_off_t off = gzoffset(gz_file_);
+                    if (off >= 0) {
+                        current_pos_.store(static_cast<uint64_t>(off), std::memory_order_relaxed);
+                    }
+
+                    lock.unlock();
+                    cv_.notify_one();
+                    start_index = i + 1;
+                }
+            }
+
+            if (start_index < bytes_read) {
+                pending_line.append(buffer.data() + start_index, static_cast<size_t>(bytes_read - start_index));
+            }
         }
 
-        while (std::getline(*stream, line)) {
+        // Flush final line
+        if (!pending_line.empty()) {
             std::unique_lock<std::mutex> lock(mutex_);
             cv_.wait(lock, [this] { return queue_.size() < MAX_QUEUE_SIZE; });
+            queue_.push(std::move(pending_line));
 
-            queue_.push(std::move(line));
-
-            // Update progress based on current stream position
-            if (zstr_stream_) {
-                current_pos_.store(static_cast<uint64_t>(zstr_stream_->compressed_tellg()));
+            // final progress update
+            z_off_t off = gzoffset(gz_file_);
+            if (off >= 0) {
+                current_pos_.store(static_cast<uint64_t>(off), std::memory_order_relaxed);
             }
 
             lock.unlock();
             cv_.notify_one();
         }
-    } catch (const std::exception& e) {
-        spdlog::error("Error in AsyncLineReader thread: {}", e.what());
     }
 
-    // Signal that reading is done
+    // Signal that no more lines will be produced
     std::unique_lock<std::mutex> lock(mutex_);
     done_ = true;
     cv_.notify_all();
