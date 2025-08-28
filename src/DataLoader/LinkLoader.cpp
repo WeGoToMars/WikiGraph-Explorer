@@ -42,6 +42,7 @@ void LinkLoader::insert_links(const std::vector<std::pair<uint32_t, uint64_t>>& 
             links_.emplace_back(page_from_index, page_to_index);
             links_inserted_++;
         } else {
+            // Log the missing page or link target for debugging
             if (!from_ok) {
                 page_from_id_miss_++;
             }

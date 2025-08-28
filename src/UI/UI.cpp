@@ -12,7 +12,6 @@
 #include <functional>
 #include <string>
 #include <thread>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -197,21 +196,24 @@ void download(UIState& state, WikiFileType type, std::string url) {
         std::string filename_suffix;
     };
 
-    static const std::unordered_map<WikiFileType, DownloadConfig> configs = {
-        {WikiFileType::Page,
-         {.progress_ptr = &state.page_download_progress,
-          .complete_ptr = &state.page_download_complete,
-          .filename_suffix = "-page.sql.gz"}},
-        {WikiFileType::PageLinks,
-         {.progress_ptr = &state.pagelinks_download_progress,
-          .complete_ptr = &state.pagelinks_download_complete,
-          .filename_suffix = "-pagelinks.sql.gz"}},
-        {WikiFileType::LinkTarget,
-         {.progress_ptr = &state.linktarget_download_progress,
-          .complete_ptr = &state.linktarget_download_complete,
-          .filename_suffix = "-linktarget.sql.gz"}}};
-
-    const auto& config = configs.at(type);
+    DownloadConfig config{};
+    switch (type) {
+        case WikiFileType::Page:
+            config = {.progress_ptr = &state.page_download_progress,
+                      .complete_ptr = &state.page_download_complete,
+                      .filename_suffix = "-page.sql.gz"};
+            break;
+        case WikiFileType::PageLinks:
+            config = {.progress_ptr = &state.pagelinks_download_progress,
+                      .complete_ptr = &state.pagelinks_download_complete,
+                      .filename_suffix = "-pagelinks.sql.gz"};
+            break;
+        case WikiFileType::LinkTarget:
+            config = {.progress_ptr = &state.linktarget_download_progress,
+                      .complete_ptr = &state.linktarget_download_complete,
+                      .filename_suffix = "-linktarget.sql.gz"};
+            break;
+    }
     std::filesystem::path full_path = PathUtils::get_resource_dir("data") / (state.selected_wiki_prefix + "wiki-" +
                                                                    state.selected_wiki_date + config.filename_suffix);
     download_file(std::move(url), full_path.string(), *config.progress_ptr, UIState::refresh_rate);

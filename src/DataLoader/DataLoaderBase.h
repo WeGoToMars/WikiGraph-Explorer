@@ -43,7 +43,7 @@ class DataLoaderBase {
      * @param start_time Process start time for speed calculation
      * @param last_time Last time the callback was invoked (updated in-place)
      * @param refresh_rate Minimum interval between callbacks
-     * @param force If true, trigger the callback regardless of interval
+     * @param force If true, trigger the callback regardless of interval (used for final progress update)
      */
     static void update_progress(size_t count, const ProgressCallback& callback, ReaderType& reader,
                                 std::chrono::steady_clock::time_point start_time,
@@ -77,8 +77,7 @@ class DataLoaderBase {
      * @param max_concurrent Max concurrent parse tasks (parallel mode only)
      */
     template <typename ParseFn, typename OnResultFn, typename OnFirstFn>
-    void parse_insert_lines(ReaderType& reader, ParseFn parse_fn, OnResultFn on_result, OnFirstFn on_first,
-                            size_t max_concurrent = 4) {
+    void parse_insert_lines(ReaderType& reader, ParseFn parse_fn, OnResultFn on_result, OnFirstFn on_first) {
         std::string line;
         bool is_first_emitted = true;
 

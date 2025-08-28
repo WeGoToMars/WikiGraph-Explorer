@@ -12,7 +12,7 @@ SQLTupleParser::SQLTupleParser(std::string_view tuple) : m_tuple(tuple) {};
 
 void SQLTupleParser::consume_delimiters() {
     if (m_pos < m_tuple.size() && m_tuple[m_pos] == ',') {
-        ++m_pos;
+        m_pos++;
     }
 }
 

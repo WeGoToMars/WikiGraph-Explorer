@@ -40,6 +40,7 @@ enum class WikiFileType : uint8_t { Page, LinkTarget, PageLinks };
 /**
  * @brief Mapping from file type string tokens to `WikiFileType` enum values.
  */
+[[maybe_unused]]
 static std::map<std::string, WikiFileType> wiki_file_type_map() {
     return {
         {"page", WikiFileType::Page},

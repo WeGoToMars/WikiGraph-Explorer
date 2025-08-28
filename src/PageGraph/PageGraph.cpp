@@ -13,8 +13,8 @@
 #include "UI/UIBase.h"
 #include "spdlog/spdlog.h"
 
-std::unique_ptr<PageGraph> PageGraph::instance = nullptr;
-std::mutex PageGraph::mtx;
+std::unique_ptr<PageGraph> PageGraph::instance = nullptr; // Must persist during the program's lifetime NOLINT
+std::mutex PageGraph::mtx; // Must persist during the program's lifetime NOLINT
 
 // Constuct page graph from pages and links
 PageGraph::PageGraph(UIState& state, std::vector<Page>&& pages, std::vector<Link>&& links)
