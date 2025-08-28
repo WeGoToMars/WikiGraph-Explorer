@@ -96,7 +96,7 @@ std::vector<std::string_view> extract_tuples(std::string_view line) {
     return tuples;
 }
 
-// Wikipedia SQL dumps are split into lines of 1MB (uncompressed)
+// Wikipedia SQL dumps are split into lines of 1 MB (uncompressed)
 uint64_t estimated_number_of_items(const std::filesystem::path& filename, const uint64_t first_line_size) {
     uint64_t file_size = std::filesystem::file_size(filename);
 

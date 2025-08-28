@@ -66,7 +66,7 @@ Elements create_progress_display(const std::string& label, size_t count, double 
 
     if (progress_ratio >= 0) {
         elements.push_back(hbox(
-            {text(std::format("Progress: {:.2f} %", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
+            {text(std::format("Progress: {:.2f}%", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
     }
 
     return elements;

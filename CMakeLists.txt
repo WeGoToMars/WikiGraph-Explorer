@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 # Set minimum macOS version to 13.3 for std::to_chars support
 if(APPLE)
   add_compile_options(-mmacosx-version-min=13.3)
@@ -33,6 +36,10 @@ FetchContent_MakeAvailable(ftxui)
 
 # Optional rapidgzip integration
 if(PARALLEL_DECOMPRESSION)
+  # Configure ISA-L to build as static library
+  set(ISAL_BUILD_SHARED_LIBS OFF CACHE BOOL "Build ISA-L as shared library" FORCE)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
+  
   FetchContent_Declare(rapidgzip
     GIT_REPOSITORY    "https://github.com/mxmlnkn/rapidgzip"
     GIT_TAG           "5b1384efd9e32155bd9ae2bf08d3cc50d9709caf" # pin the commit to avoid breaking changes
@@ -41,13 +48,15 @@ if(PARALLEL_DECOMPRESSION)
   # Configure rapidgzip
   set(LIBRAPIDARCHIVE_BUILD_TESTS OFF CACHE BOOL "Disable tests" FORCE)
   set(LIBRAPIDARCHIVE_BUILD_TOOLS OFF CACHE BOOL "Disable tools" FORCE)
-  set(LIBRAPIDARCHIVE_WITH_RPMALLOC OFF CACHE BOOL "Disable rpmalloc" FORCE)
-  set(LIBRAPIDARCHIVE_WITH_ISAL OFF CACHE BOOL "Disable isal" FORCE)
+  set(LIBRAPIDARCHIVE_WITH_RPMALLOC ON CACHE BOOL "Enable rpmalloc by default" FORCE)
+  set(LIBRAPIDARCHIVE_WITH_ISAL ON CACHE BOOL "Enable isal by default" FORCE)
   
   FetchContent_MakeAvailable(rapidgzip)
-  # rapidzip uses a lot of constexpr, so we need to increase the limit
+  # rapidgzip uses constexpr to precompute LUTs, so we need to increase the limit
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-fconstexpr-steps=20000000)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    add_compile_options(/constexpr:steps 20000000)
   endif()
 
   message(STATUS "Using rapidgzip for parallel decompression")
