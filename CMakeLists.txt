@@ -158,6 +158,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     -Wno-sign-conversion       # Ignore warnings about unsigned to signed conversions
     -Wno-padded                # Ignore warnings about padding in structs
     -Wno-shorten-64-to-32      # Ignore warnings about 64-bit to 32-bit conversions
+    -Wno-exit-time-destructors # Ignore warnings about objects that need to persist until the end of the program
+    -Wno-global-constructors   # ditto
     -Wno-switch-default        # Handled by the clang-tidy
   )
 endif()

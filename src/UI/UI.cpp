@@ -65,8 +65,8 @@ Elements create_progress_display(const std::string& label, size_t count, double 
                          text("Speed: " + std::format("{:L} {}/sec", static_cast<int>(speed), unit))};
 
     if (progress_ratio >= 0) {
-        elements.push_back(hbox(
-            {text(std::format("Progress: {:.2f}%", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
+        elements.push_back(
+            hbox({text(std::format("Progress: {:.2f}%", progress_ratio * 100)), text(" "), gauge(progress_ratio)}));
     }
 
     return elements;
@@ -88,105 +88,89 @@ std::chrono::milliseconds total_load_duration(UIState& state) {
 }
 
 //=============================================================================
-// SEARCH FUNCTIONALITY
+// MAIN UI ENTRY POINT
 //=============================================================================
 
-void perform_search(UIState& state) {
-    state.error_message.clear();
-    state.found_paths.clear();
-    state.is_searching = true;
-    state.bfs_progress = {.current_layer = 0, .layer_size = 0, .layer_explored_count = 0, .total_explored_nodes = 0};
+void run_ui(UIState& state, std::function<void()> on_wiki_selected) {
+    // Create a new screen
+    ScreenInteractive screen = ScreenInteractive::TerminalOutput();
 
-    // Look up indices
-    const std::string start_page = trim(state.start_title);
-    const std::string end_page = trim(state.end_title);
+    // Fetch wiki statistics
+    std::vector<WikiEntry> stats = fetch_wiki_stats();
 
-    // Get the PageGraph to access page data
-    const PageGraph& graph = PageGraph::get();
-    if (start_page.empty() || end_page.empty()) {
-        state.error_message = "Please enter both start and end page titles.";
-        return;
+    if (stats.empty()) {
+        state.offline_mode = true;
     }
 
-    uint32_t start_idx = UINT32_MAX;
-    uint32_t end_idx = UINT32_MAX;
+    // Create components
+    Component wiki_select_ui = create_wiki_select_ui(state, stats, std::move(on_wiki_selected));
+    Component download_ui = create_download_ui(state, on_wiki_selected);
+    Component progress_ui = create_progress_ui(state);
+    Component input_ui = create_input_ui(state);
+    Component results_ui = create_results_ui(state);
+    Component main_ui = create_main_ui(wiki_select_ui, download_ui, input_ui, results_ui, progress_ui, state);
 
-    if (state.page_loader != nullptr && state.page_loader->has_title_lookup()) {
-        if (!state.page_loader->find_page_index_by_title(start_page, start_idx)) {
-            state.error_message = "Start page not found: '" + start_page + "'";
-            return;
-        }
-        if (!state.page_loader->find_page_index_by_title(end_page, end_idx)) {
-            state.error_message = "End page not found: '" + end_page + "'";
-            return;
-        }
-    } else {
-        state.error_message = "Hmm, page loader not initialized, please create an issue on GitHub if you see this.";
-        return;
-    }
+    // Set up additional event handling for global events (like ESC to exit)
+    auto main_with_global_events = CatchEvent(main_ui, [&](Event event) { return handle_key_events(&event, state); });
 
-    // Perform the search and record the time it took
-    const auto start_time = std::chrono::steady_clock::now();
-    spdlog::debug("Searching for {} -> {} (indices: {} -> {})", start_page, end_page, start_idx, end_idx);
+    // Run the UI loop
+    screen.Loop(main_with_global_events);
 
-    // Diagnostics: log out-degree of start node to verify outgoing edges
-    const auto& adj = graph.get_adjacency_list();
-    if (start_idx < adj.size()) {
-        spdlog::debug("Start node '{}' (idx {}) out-degree: {}", start_page, start_idx, adj[start_idx].size());
-    }
-    state.found_paths = graph.all_shortest_paths(state, start_idx, end_idx);
-
-    const auto end_time = std::chrono::steady_clock::now();
-    state.search_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-
-    if (state.found_paths.empty()) {
-        state.error_message = "No path found between the given pages.";
-    }
-    state.is_searching = false;
-    post_ui_refresh();
+    // Clean up - shared_ptr components are automatically cleaned up
 }
 
 //=============================================================================
-// EVENT HANDLING
+// WIKI SELECTION STAGE
 //=============================================================================
 
-void handle_search_submit(UIState& state) {
-    std::thread search_thread([&state] { perform_search(state); });
-    search_thread.detach();
-    state.stage = UIStage::ShowPaths;
-    post_ui_refresh();
-}
+Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Component& input_ui, Component& results_ui,
+                         Component& progress_ui, UIState& state) {
+    // Create a renderer that switches between components based on stage
+    auto main_ui = Renderer([&] {
+        switch (state.stage.load()) {
+            case UIStage::WikiSelection:
+                return wiki_select_ui->Render();
 
-bool handle_key_events(void* event_ptr, UIState& state) {
-    auto& event = *static_cast<Event*>(event_ptr);
+            case UIStage::Download: {
+                return download_ui->Render();
+            }
 
-    if (state.stage == UIStage::ShowPaths) {
-        if (event == Event::Escape) {
-            ScreenInteractive::Active()->Exit();
-            return true;
-        } else if (event.is_character()) {
-            state.start_title.clear();
-            state.end_title.clear();
-            state.error_message.clear();
-            state.found_paths.clear();
-            state.stage = UIStage::UserInput;
-            post_ui_refresh();
-            return true;
+            case UIStage::LoadPages:
+            case UIStage::LoadLinkTargets:
+            case UIStage::LoadLinks:
+            case UIStage::BuildingGraph:
+                return progress_ui->Render();
+
+            case UIStage::UserInput:
+                return vbox({progress_ui->Render(), input_ui->Render()});
+
+            case UIStage::ShowPaths:
+                return vbox({progress_ui->Render(), results_ui->Render()});
+
+            case UIStage::Done:
+                return text("Done") | border;
         }
-    } else if (state.stage == UIStage::Download && !state.download_error_message.empty()) {
-        // Handle key press when download error is shown
-        if (event.is_character()) {
-            state.download_error_message.clear();
-            state.stage = UIStage::WikiSelection;
-            post_ui_refresh();
-            return true;
+    });
+
+    // Wrap with event handling that delegates to the appropriate component
+    auto main_with_events = CatchEvent(main_ui, [&](const Event& event) {
+        if (state.stage == UIStage::WikiSelection) {
+            return wiki_select_ui->OnEvent(event);
+        } else if (state.stage == UIStage::Download) {
+            return download_ui->OnEvent(event);
+        } else if (state.stage == UIStage::UserInput) {
+            return input_ui->OnEvent(event);
+        } else if (state.stage == UIStage::ShowPaths) {
+            return results_ui->OnEvent(event);
         }
-    }
-    return false;
+        return false;
+    });
+
+    return main_with_events;
 }
 
 //=============================================================================
-// DOWNLOAD FUNCTIONALITY
+// DOWNLOAD STAGE
 //=============================================================================
 
 void download(UIState& state, WikiFileType type, std::string url) {
@@ -214,8 +198,9 @@ void download(UIState& state, WikiFileType type, std::string url) {
                       .filename_suffix = "-linktarget.sql.gz"};
             break;
     }
-    std::filesystem::path full_path = PathUtils::get_resource_dir("data") / (state.selected_wiki_prefix + "wiki-" +
-                                                                   state.selected_wiki_date + config.filename_suffix);
+    std::filesystem::path full_path =
+        PathUtils::get_resource_dir("data") /
+        (state.selected_wiki_prefix + "wiki-" + state.selected_wiki_date + config.filename_suffix);
     download_file(std::move(url), full_path.string(), *config.progress_ptr, UIState::refresh_rate);
     config.complete_ptr->store(true);
 
@@ -243,10 +228,6 @@ void download_in_background(UIState& state, DownloadURLs urls) {
     download_linktarget.detach();
 }
 
-//=============================================================================
-// RENDERING FUNCTIONS
-//=============================================================================
-
 static Element render_download_progress(std::atomic<UIState::DownloadProgress>& dp) {
     const auto [dlnow, dltotal, dlspeed] = dp.load();
     return hbox({gauge(static_cast<float>(dlnow) / static_cast<float>(dltotal)) | flex, text(" "),
@@ -269,9 +250,11 @@ static Element render_download_ui(UIState& state) {
     double total_speed = page_speed + pagelinks_speed + linktarget_speed;
 
     Elements elements;
-    elements.push_back(
-        hbox({create_text("Downloading " + state.selected_wiki_prefix + "wiki... ", true),
-              create_text(std::format("{:5.2f} MB/s", total_speed / kBytesPerMB), true, Color::GrayDark)}));
+    std::string url =
+        std::format("https://dumps.wikimedia.org/{}wiki/{}/", state.selected_wiki_prefix, state.selected_wiki_date);
+    elements.push_back(hbox({create_text(std::format("Downloading {}wiki from ", state.selected_wiki_prefix), true),
+                             create_text(url, true, Color::GrayDark) | hyperlink(url),
+                             create_text(std::format(" at {:.2f} MB/s", total_speed / kBytesPerMB), true)}));
     elements.push_back(separator());
 
     // Page file
@@ -292,10 +275,6 @@ static Element render_download_ui(UIState& state) {
 
     return vbox(std::move(elements)) | border;
 }
-
-//=============================================================================
-// COMPONENT CREATION FUNCTIONS
-//=============================================================================
 
 Component create_download_ui(UIState& state, std::function<void()> on_start_loading) {
     auto dummy_container = Container::Vertical({});
@@ -374,6 +353,103 @@ Component create_download_ui(UIState& state, std::function<void()> on_start_load
     return download_ui;
 }
 
+//=============================================================================
+// LOADING STAGE
+//=============================================================================
+
+Component create_progress_ui(UIState& state) {
+    auto dummy_container = Container::Vertical({});
+    auto progress_ui = Renderer(dummy_container, [&] {
+        Elements elements;
+
+        if (state.stage.load() < UIStage::UserInput) {
+            // Loading stages
+            switch (state.stage.load()) {
+                case UIStage::WikiSelection:
+                    break;
+                case UIStage::Download:
+                    break;
+                case UIStage::LoadPages: {
+                    float progress_ratio = static_cast<float>(state.page_progress.load().current_bytes) /
+                                           static_cast<float>(state.page_progress.load().total_bytes);
+                    elements = {create_step_header("Step 1/4", "Loading Wikipedia pages..."), separator()};
+                    auto progress_elems = create_progress_display("Loaded pages", state.page_count.load(),
+                                                                  state.page_speed.load(), "pages", progress_ratio);
+                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
+                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
+                    break;
+                }
+                case UIStage::LoadLinkTargets: {
+                    float progress_ratio = static_cast<float>(state.linktarget_progress.load().current_bytes) /
+                                           static_cast<float>(state.linktarget_progress.load().total_bytes);
+                    elements = {create_step_header("Step 2/4", "Loading Wikipedia link targets..."), separator()};
+                    auto progress_elems =
+                        create_progress_display("Loaded link targets", state.linktarget_count.load(),
+                                                state.linktarget_speed.load(), "targets", progress_ratio);
+                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
+                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
+                    break;
+                }
+                case UIStage::LoadLinks: {
+                    float progress_ratio = static_cast<float>(state.link_progress.load().current_bytes) /
+                                           static_cast<float>(state.link_progress.load().total_bytes);
+                    elements = {create_step_header("Step 3/4", "Loading Wikipedia links..."), separator()};
+                    auto progress_elems = create_progress_display("Loaded links", state.link_count.load(),
+                                                                  state.link_speed.load(), "links", progress_ratio);
+                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
+                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
+                    break;
+                }
+                case UIStage::BuildingGraph: {
+                    auto gb = state.graph_build_progress.load();
+                    float progress_ratio =
+                        gb.total_links > 0 ? static_cast<float>(gb.processed_links) / static_cast<float>(gb.total_links)
+                                           : 0.0f;
+                    elements = {create_step_header("Step 4/4", "Building graph..."),
+                                separator(),
+                                text("Loaded pages: " + std::format("{:L}", state.page_count.load())),
+                                text("Loaded link targets: " + std::format("{:L}", state.linktarget_count.load())),
+                                text("Loaded links: " + std::format("{:L}", state.link_count.load())),
+                                text(" ")};
+                    auto build_elems =
+                        create_progress_display("Edges inserted", gb.processed_links,
+                                                static_cast<double>(gb.edges_speed), "edges", progress_ratio);
+                    elements.insert(elements.end(), build_elems.begin(), build_elems.end());
+                    elements.push_back(text(" "));
+                    elements.push_back(create_text("Building...", false, Color::Yellow));
+                    break;
+                }
+                case UIStage::UserInput:
+                    break;
+                case UIStage::ShowPaths:
+                    break;
+                case UIStage::Done:
+                    break;
+            }
+        } else {
+            // Completed stage
+            elements = {
+                create_text(std::format("Wikipedia ({}wiki) loaded!", state.selected_wiki_prefix), true),
+                separator(),
+                create_timed_text("Loaded pages: " + std::format("{:L}", state.page_count.load()),
+                                  state.page_load_duration.count()),
+                create_timed_text("Loaded link targets: " + std::format("{:L}", state.linktarget_count.load()),
+                                  state.linktarget_load_duration.count()),
+                create_timed_text("Loaded links: " + std::format("{:L}", state.link_count.load()),
+                                  state.link_load_duration.count()),
+                hbox({text("Graph built in " + std::to_string(state.graph_build_duration.count()) + " ms =>"),
+                      create_text(" Total " + std::to_string(total_load_duration(state).count()) + " ms", true)})};
+        }
+        return vbox(std::move(elements)) | border;
+    });
+
+    return progress_ui;
+}
+
+//=============================================================================
+// USER INPUT STAGE
+//=============================================================================
+
 Component create_input_ui(UIState& state) {
     auto input_start = Input(&state.start_title, "Start page title");
 
@@ -394,6 +470,76 @@ Component create_input_ui(UIState& state) {
 
     return input_ui;
 }
+
+//=============================================================================
+// SEARCH FUNCTIONALITY
+//=============================================================================
+
+void perform_search(UIState& state) {
+    state.error_message.clear();
+    state.found_paths.clear();
+    state.is_searching = true;
+    state.bfs_progress = {.current_layer = 0, .layer_size = 0, .layer_explored_count = 0, .total_explored_nodes = 0};
+
+    // Look up indices
+    const std::string start_page = trim(state.start_title);
+    const std::string end_page = trim(state.end_title);
+
+    // Get the PageGraph to access page data
+    const PageGraph& graph = PageGraph::get();
+    if (start_page.empty() || end_page.empty()) {
+        state.error_message = "Please enter both start and end page titles.";
+        return;
+    }
+
+    uint32_t start_idx = UINT32_MAX;
+    uint32_t end_idx = UINT32_MAX;
+
+    if (state.page_loader != nullptr && state.page_loader->has_title_lookup()) {
+        if (!state.page_loader->find_page_index_by_title(start_page, start_idx)) {
+            state.error_message = "Start page not found: '" + start_page + "'";
+            return;
+        }
+        if (!state.page_loader->find_page_index_by_title(end_page, end_idx)) {
+            state.error_message = "End page not found: '" + end_page + "'";
+            return;
+        }
+    } else {
+        state.error_message = "Hmm, page loader not initialized, please create an issue on GitHub if you see this.";
+        return;
+    }
+
+    // Perform the search and record the time it took
+    const auto start_time = std::chrono::steady_clock::now();
+    spdlog::debug("Searching for {} -> {} (indices: {} -> {})", start_page, end_page, start_idx, end_idx);
+
+    // Diagnostics: log out-degree of start node to verify outgoing edges
+    const auto& adj = graph.get_adjacency_list();
+    if (start_idx < adj.size()) {
+        spdlog::debug("Start node '{}' (idx {}) out-degree: {}", start_page, start_idx, adj[start_idx].size());
+    }
+    state.found_paths = graph.all_shortest_paths(state, start_idx, end_idx);
+
+    const auto end_time = std::chrono::steady_clock::now();
+    state.search_duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+
+    if (state.found_paths.empty()) {
+        state.error_message = "No path found between the given pages.";
+    }
+    state.is_searching = false;
+    post_ui_refresh();
+}
+
+void handle_search_submit(UIState& state) {
+    std::thread search_thread([&state] { perform_search(state); });
+    search_thread.detach();
+    state.stage = UIStage::ShowPaths;
+    post_ui_refresh();
+}
+
+//=============================================================================
+// RESULTS DISPLAY STAGE
+//=============================================================================
 
 Component create_results_ui(UIState& state) {
     auto dummy_container = Container::Vertical({});
@@ -466,169 +612,34 @@ Component create_results_ui(UIState& state) {
     return results_ui;
 }
 
-Component create_progress_ui(UIState& state) {
-    auto dummy_container = Container::Vertical({});
-    auto progress_ui = Renderer(dummy_container, [&] {
-        Elements elements;
-
-        if (state.stage.load() < UIStage::UserInput) {
-            // Loading stages
-            switch (state.stage.load()) {
-                case UIStage::WikiSelection:
-                    break;
-                case UIStage::Download:
-                    break;
-                case UIStage::LoadPages: {
-                    float progress_ratio = static_cast<float>(state.page_progress.load().current_bytes) /
-                                           static_cast<float>(state.page_progress.load().total_bytes);
-                    elements = {create_step_header("Step 1/4", "Loading Wikipedia pages..."), separator()};
-                    auto progress_elems = create_progress_display("Loaded pages", state.page_count.load(),
-                                                                  state.page_speed.load(), "pages", progress_ratio);
-                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
-                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
-                    break;
-                }
-                case UIStage::LoadLinkTargets: {
-                    float progress_ratio = static_cast<float>(state.linktarget_progress.load().current_bytes) /
-                                           static_cast<float>(state.linktarget_progress.load().total_bytes);
-                    elements = {create_step_header("Step 2/4", "Loading Wikipedia link targets..."), separator()};
-                    auto progress_elems =
-                        create_progress_display("Loaded link targets", state.linktarget_count.load(),
-                                                state.linktarget_speed.load(), "targets", progress_ratio);
-                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
-                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
-                    break;
-                }
-                case UIStage::LoadLinks: {
-                    float progress_ratio = static_cast<float>(state.link_progress.load().current_bytes) /
-                                           static_cast<float>(state.link_progress.load().total_bytes);
-                    elements = {create_step_header("Step 3/4", "Loading Wikipedia links..."), separator()};
-                    auto progress_elems = create_progress_display("Loaded links", state.link_count.load(),
-                                                                  state.link_speed.load(), "links", progress_ratio);
-                    elements.insert(elements.end(), progress_elems.begin(), progress_elems.end());
-                    elements.insert(elements.end(), {text(" "), create_text("Loading...", false, Color::Yellow)});
-                    break;
-                }
-                case UIStage::BuildingGraph: {
-                    auto gb = state.graph_build_progress.load();
-                    float progress_ratio =
-                        gb.total_links > 0 ? static_cast<float>(gb.processed_links) / static_cast<float>(gb.total_links)
-                                           : 0.0f;
-                    elements = {create_step_header("Step 4/4", "Building graph..."),
-                                separator(),
-                                text("Loaded pages: " + std::format("{:L}", state.page_count.load())),
-                                text("Loaded link targets: " + std::format("{:L}", state.linktarget_count.load())),
-                                text("Loaded links: " + std::format("{:L}", state.link_count.load())),
-                                text(" ")};
-                    auto build_elems = create_progress_display("Edges inserted", gb.processed_links,
-                                                              static_cast<double>(gb.edges_speed), "edges",
-                                                              progress_ratio);
-                    elements.insert(elements.end(), build_elems.begin(), build_elems.end());
-                    elements.push_back(text(" "));
-                    elements.push_back(create_text("Building...", false, Color::Yellow));
-                    break;
-                }
-                case UIStage::UserInput:
-                    break;
-                case UIStage::ShowPaths:
-                    break;
-                case UIStage::Done:
-                    break;
-            }
-        } else {
-            // Completed stage
-            elements = {
-                create_text(std::format("Wikipedia ({}wiki) loaded!", state.selected_wiki_prefix), true),
-                separator(),
-                create_timed_text("Loaded pages: " + std::format("{:L}", state.page_count.load()),
-                                  state.page_load_duration.count()),
-                create_timed_text("Loaded link targets: " + std::format("{:L}", state.linktarget_count.load()),
-                                  state.linktarget_load_duration.count()),
-                create_timed_text("Loaded links: " + std::format("{:L}", state.link_count.load()),
-                                  state.link_load_duration.count()),
-                hbox({text("Graph built in " + std::to_string(state.graph_build_duration.count()) + " ms =>"),
-                      create_text(" Total " + std::to_string(total_load_duration(state).count()) + " ms", true)})};
-        }
-        return vbox(std::move(elements)) | border;
-    });
-
-    return progress_ui;
-}
-
-Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Component& input_ui, Component& results_ui,
-                         Component& progress_ui, UIState& state) {
-    // Create a renderer that switches between components based on stage
-    auto main_ui = Renderer([&] {
-        switch (state.stage.load()) {
-            case UIStage::WikiSelection:
-                return wiki_select_ui->Render();
-
-            case UIStage::Download: {
-                return download_ui->Render();
-            }
-
-            case UIStage::LoadPages:
-            case UIStage::LoadLinkTargets:
-            case UIStage::LoadLinks:
-            case UIStage::BuildingGraph:
-                return progress_ui->Render();
-
-            case UIStage::UserInput:
-                return vbox({progress_ui->Render(), input_ui->Render()});
-
-            case UIStage::ShowPaths:
-                return vbox({progress_ui->Render(), results_ui->Render()});
-
-            case UIStage::Done:
-                return text("Done") | border;
-        }
-    });
-
-    // Wrap with event handling that delegates to the appropriate component
-    auto main_with_events = CatchEvent(main_ui, [&](const Event& event) {
-        if (state.stage == UIStage::WikiSelection) {
-            return wiki_select_ui->OnEvent(event);
-        } else if (state.stage == UIStage::Download) {
-            return download_ui->OnEvent(event);
-        } else if (state.stage == UIStage::UserInput) {
-            return input_ui->OnEvent(event);
-        } else if (state.stage == UIStage::ShowPaths) {
-            return results_ui->OnEvent(event);
-        }
-        return false;
-    });
-
-    return main_with_events;
-}
-
 //=============================================================================
-// MAIN UI ENTRY POINT
+// EVENT HANDLING
 //=============================================================================
 
-void run_ui(UIState& state, std::function<void()> on_wiki_selected) {
-    // Create a new screen
-    ScreenInteractive screen = ScreenInteractive::TerminalOutput();
+bool handle_key_events(void* event_ptr, UIState& state) {
+    auto& event = *static_cast<Event*>(event_ptr);
 
-    // Fetch wiki statistics
-    std::vector<WikiEntry> stats = fetch_wiki_stats();
-
-    if (stats.empty()) {
-        state.offline_mode = true;
+    if (state.stage == UIStage::ShowPaths) {
+        if (event == Event::Escape) {
+            ScreenInteractive::Active()->Exit();
+            return true;
+        } else if (event.is_character()) {
+            state.start_title.clear();
+            state.end_title.clear();
+            state.error_message.clear();
+            state.found_paths.clear();
+            state.stage = UIStage::UserInput;
+            post_ui_refresh();
+            return true;
+        }
+    } else if (state.stage == UIStage::Download && !state.download_error_message.empty()) {
+        // Handle key press when download error is shown
+        if (event.is_character()) {
+            state.download_error_message.clear();
+            state.stage = UIStage::WikiSelection;
+            post_ui_refresh();
+            return true;
+        }
     }
-
-    // Create components
-    Component wiki_select_ui = create_wiki_select_ui(state, stats, std::move(on_wiki_selected));
-    Component download_ui = create_download_ui(state, on_wiki_selected);
-    Component progress_ui = create_progress_ui(state);
-    Component input_ui = create_input_ui(state);
-    Component results_ui = create_results_ui(state);
-    Component main_ui = create_main_ui(wiki_select_ui, download_ui, input_ui, results_ui, progress_ui, state);
-
-    // Set up additional event handling for global events (like ESC to exit)
-    auto main_with_global_events = CatchEvent(main_ui, [&](Event event) { return handle_key_events(&event, state); });
-
-    // Run the UI loop
-    screen.Loop(main_with_global_events);
-
-    // Clean up - shared_ptr components are automatically cleaned up
+    return false;
 }
