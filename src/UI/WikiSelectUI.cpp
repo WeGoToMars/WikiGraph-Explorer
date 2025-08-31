@@ -171,13 +171,32 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
     auto menu = Menu(&ui_manager->get_wiki_names(), &state.selected_wiki_index);
 
     // Add event handling
-    auto menu_with_events = CatchEvent(menu, [&state, ui_manager, on_wiki_selected](const Event& event) {
+    auto menu_with_events = CatchEvent(menu, [&state, ui_manager, on_wiki_selected](Event event) {
         auto* screen = ScreenInteractive::Active();
         if (event.character() == "q") {
             if (screen) {
                 screen->Exit();
             }
             return true;
+        }
+        // Mouse wheel scroll to move selection
+        if (event.is_mouse()) {
+            const auto& mouse = event.mouse();
+            if (mouse.button == Mouse::WheelUp) {
+                if (state.selected_wiki_index > 0) {
+                    state.selected_wiki_index--;
+                    post_ui_refresh();
+                }
+                return true;
+            }
+            if (mouse.button == Mouse::WheelDown) {
+                const int total_rows = static_cast<int>(ui_manager->get_static_stats().size());
+                if (state.selected_wiki_index + 1 < total_rows) {
+                    state.selected_wiki_index++;
+                    post_ui_refresh();
+                }
+                return true;
+            }
         }
         if (event == Event::Return && !ui_manager->get_static_stats().empty()) {
             const auto& selected_stat = ui_manager->get_stat_at(state.selected_wiki_index);
@@ -202,71 +221,63 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
         return false;
     });
 
-    // Create a custom renderer that displays the menu as a table
+    // Create a renderer that displays the menu as a table with auto-scrolling frame
     auto table_menu = Renderer(menu_with_events, [ui_manager, &state] {
-        // Calculate visible window for scrolling
-        const int visible_rows = 12;  // Number of data rows visible at once
         const int total_rows = static_cast<int>(ui_manager->get_static_stats().size());
         const int selected = state.selected_wiki_index;
 
-        // Calculate scroll offset to keep selected item visible
-        static int scroll_offset = 0;
-        if (selected < scroll_offset) {
-            scroll_offset = selected;
-        } else if (selected >= scroll_offset + visible_rows) {
-            scroll_offset = selected - visible_rows + 1;
-        }
+        // Create separate header and data tables for fixed header scrolling
+        // Both use identical column constraints to ensure perfect alignment
 
-        // Ensure scroll_offset is within bounds
-        scroll_offset = std::max(0, std::min(scroll_offset, total_rows - visible_rows));
-        if (total_rows <= visible_rows) scroll_offset = 0;
+        // Header table (fixed at top)
+        std::vector<Element> header_elements = {
+            text("Language (en)") | bold | size(WIDTH, EQUAL, 25),
+            text("Language (local)") | bold | size(WIDTH, EQUAL, 20),
+            text("Code") | bold | size(WIDTH, EQUAL, 12),
+            text("Articles") | bold | size(WIDTH, EQUAL, 10),
+            text("Users") | bold | size(WIDTH, EQUAL, 12)
+        };
+        auto header_table = Table({header_elements});
+        header_table.SelectAll().SeparatorVertical(LIGHT);
 
-        // Create table data with only visible rows
-        std::vector<std::vector<std::string>> table_data;
-
-        // Header row
-        table_data.push_back({"Language (en)", "Language (local)", "Code", "Articles", "Users"});
-
-        // Add visible data rows
-        int end_row = std::min(scroll_offset + visible_rows, total_rows);
-        for (int i = scroll_offset; i < end_row; i++) {
+        // Data table (scrollable)
+        std::vector<std::vector<Element>> data_rows;
+        for (int i = 0; i < total_rows; i++) {
             const auto& stat = ui_manager->get_stat_at(i);
+            std::vector<Element> row_elements;
 
-            std::vector<std::string> row = {std::format("{:<26}", stat.language_name),
-                                            std::format("{:<20}", stat.local_language_name),
-                                            std::format("{:<12}", stat.language_code),
-                                            stat.is_downloaded ? "" : std::format("{:>10L}", stat.articles),
-                                            stat.is_downloaded ? "" : std::format("{:>12L}", stat.users)};
-            table_data.push_back(row);
-        }
+            row_elements.push_back(paragraph(stat.language_name) | size(WIDTH, EQUAL, 25));
+            row_elements.push_back(paragraph(stat.local_language_name) | size(WIDTH, EQUAL, 20));
+            row_elements.push_back(text(stat.language_code) | size(WIDTH, EQUAL, 12));
 
-        // Create table
-        auto table = Table(table_data);
-        table.SelectAll().Border(LIGHT);
-        table.SelectRow(0).Decorate(bold);
-        table.SelectRow(0).SeparatorVertical(LIGHT);
-        table.SelectRow(0).Border(DOUBLE);
-
-        // Highlight selected row and downloaded rows
-        for (int i = scroll_offset; i < end_row; i++) {
-            int visible_row = i - scroll_offset + 1;  // +1 for header
-
-            if (i == selected) {
-                // Selected row - blue background (highest priority)
-                table.SelectRow(visible_row).Decorate(bgcolor(Color::Blue));
-                table.SelectRow(visible_row).Decorate(color(Color::White));
-            } else if (ui_manager->is_wiki_downloaded(i)) {
-                // Downloaded row - green background (only if not selected)
-                table.SelectRow(visible_row).Decorate(bgcolor(Color::GreenLight));
-                table.SelectRow(visible_row).Decorate(color(Color::Black));
+            if (stat.is_downloaded) {
+                row_elements.push_back(text("") | size(WIDTH, EQUAL, 10));
+            } else {
+                row_elements.push_back(text(std::format("{:L}", stat.articles)) | align_right | size(WIDTH, EQUAL, 10));
             }
+
+            if (stat.is_downloaded) {
+                row_elements.push_back(text("") | size(WIDTH, EQUAL, 12));
+            } else {
+                row_elements.push_back(text(std::format("{:L}", stat.users)) | align_right | size(WIDTH, EQUAL, 12));
+            }
+
+            data_rows.push_back(row_elements);
         }
 
-        // Create scroll indicator info
-        std::string scroll_info;
-        if (total_rows > visible_rows) {
-            scroll_info = std::format(" (Showing {}-{} of {})", scroll_offset + 1,
-                                      std::min(scroll_offset + visible_rows, total_rows), total_rows);
+        auto data_table = Table(data_rows);
+        data_table.SelectAll().SeparatorVertical(LIGHT);
+
+        // Highlight data rows
+        for (int i = 0; i < total_rows; i++) {
+            if (i == selected) { // highlight the selected row
+                data_table.SelectRow(i).Decorate(bgcolor(Color::Blue));
+                data_table.SelectRow(i).Decorate(color(Color::White));
+                data_table.SelectRow(i).Decorate(focus);
+            } else if (ui_manager->is_wiki_downloaded(i)) {
+                data_table.SelectRow(i).Decorate(bgcolor(Color::GreenLight));
+                data_table.SelectRow(i).Decorate(color(Color::Black));
+            }
         }
 
         std::string offline_mode_warning;
@@ -274,13 +285,15 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
             offline_mode_warning = " (offline mode)";
         }
 
-        return vbox({hbox({text("Select Wikipedia Language" + scroll_info) | bold,
+        return vbox({hbox({text("Select Wikipedia Language") | bold,
                            text(offline_mode_warning) | color(Color::Red1)}),
-                     separator(), table.Render() | frame, separator(),
-                     text("Use arrow "
-                          "keys to navigate, Enter to select, 'q' "
-                          "to quit") |
-                         color(Color::GrayDark)}) |
+                     separator(),
+                     header_table.Render(),
+                     separator(),
+                     data_table.Render() | vscroll_indicator | frame | flex,
+                     separator(),
+                     text(std::format("[{}/{}]: Enter to select, 'q' to quit", selected + 1, total_rows)) |
+                       color(Color::GrayDark)}) |
                border;
     });
 

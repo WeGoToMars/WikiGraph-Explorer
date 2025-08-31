@@ -92,8 +92,8 @@ std::chrono::milliseconds total_load_duration(UIState& state) {
 //=============================================================================
 
 void run_ui(UIState& state, std::function<void()> on_wiki_selected) {
-    // Create a new screen
-    ScreenInteractive screen = ScreenInteractive::TerminalOutput();
+    // Use fullscreen for all stages for consistent behavior
+    ScreenInteractive screen = ScreenInteractive::Fullscreen();
 
     // Fetch wiki statistics
     std::vector<WikiEntry> stats = fetch_wiki_stats();
@@ -129,7 +129,8 @@ Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Comp
     auto main_ui = Renderer([&] {
         switch (state.stage.load()) {
             case UIStage::WikiSelection:
-                return wiki_select_ui->Render();
+                // Center the wiki selector nicely within fullscreen
+                return center(wiki_select_ui->Render()) | flex;
 
             case UIStage::Download: {
                 return download_ui->Render();
