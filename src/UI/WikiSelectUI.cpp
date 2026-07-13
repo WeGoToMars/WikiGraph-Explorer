@@ -1,5 +1,6 @@
-#include "WikiSelectUI.h"
-
+#include <PathUtils.h>
+#include <UI.h>
+#include <WikiSelectUI.h>
 #include <spdlog/spdlog.h>
 
 #include <filesystem>
@@ -10,9 +11,6 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/table.hpp>
 #include <map>
-
-#include "UI.h"
-#include "Utils/PathUtils.h"
 
 using namespace ftxui;
 
@@ -232,11 +230,8 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
         // Header table (fixed at top)
         std::vector<Element> header_elements = {
             text("Language (en)") | bold | size(WIDTH, EQUAL, 25),
-            text("Language (local)") | bold | size(WIDTH, EQUAL, 20),
-            text("Code") | bold | size(WIDTH, EQUAL, 12),
-            text("Articles") | bold | size(WIDTH, EQUAL, 10),
-            text("Users") | bold | size(WIDTH, EQUAL, 12)
-        };
+            text("Language (local)") | bold | size(WIDTH, EQUAL, 20), text("Code") | bold | size(WIDTH, EQUAL, 12),
+            text("Articles") | bold | size(WIDTH, EQUAL, 10), text("Users") | bold | size(WIDTH, EQUAL, 12)};
         auto header_table = Table({header_elements});
         header_table.SelectAll().SeparatorVertical(LIGHT);
 
@@ -270,7 +265,7 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
 
         // Highlight data rows
         for (int i = 0; i < total_rows; i++) {
-            if (i == selected) { // highlight the selected row
+            if (i == selected) {  // highlight the selected row
                 data_table.SelectRow(i).Decorate(bgcolor(Color::Blue));
                 data_table.SelectRow(i).Decorate(color(Color::White));
                 data_table.SelectRow(i).Decorate(focus);
@@ -285,15 +280,11 @@ Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& entries,
             offline_mode_warning = " (offline mode)";
         }
 
-        return vbox({hbox({text("Select Wikipedia Language") | bold,
-                           text(offline_mode_warning) | color(Color::Red1)}),
-                     separator(),
-                     header_table.Render(),
-                     separator(),
-                     data_table.Render() | vscroll_indicator | frame | flex,
-                     separator(),
+        return vbox({hbox({text("Select Wikipedia Language") | bold, text(offline_mode_warning) | color(Color::Red1)}),
+                     separator(), header_table.Render(), separator(),
+                     data_table.Render() | vscroll_indicator | frame | flex, separator(),
                      text(std::format("[{}/{}]: Enter to select, 'q' to quit", selected + 1, total_rows)) |
-                       color(Color::GrayDark)}) |
+                         color(Color::GrayDark)}) |
                border;
     });
 

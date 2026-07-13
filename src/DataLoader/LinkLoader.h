@@ -1,10 +1,10 @@
 #pragma once
 
-#include <vector>
+#include <DataLoaderBase.h>
+#include <LinkTargetLoader.h>
+#include <PageLoader.h>
 
-#include "DataLoaderBase.h"
-#include "LinkTargetLoader.h"
-#include "PageLoader.h"
+#include <vector>
 
 // These are indexes into the pages vector, not Wikipedia page ids
 struct Link {

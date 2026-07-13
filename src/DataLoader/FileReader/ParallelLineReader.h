@@ -2,6 +2,7 @@
 
 #ifdef PARALLEL_DECOMPRESSION
 
+#include <UIBase.h>
 #include <concurrentqueue.h>
 
 #include <atomic>
@@ -10,8 +11,6 @@
 #include <mutex>
 #include <string>
 #include <thread>
-
-#include "UI/UIBase.h"
 
 // Forward declarations to avoid heavy rapidgzip includes in header
 namespace rapidgzip {

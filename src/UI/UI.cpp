@@ -1,4 +1,11 @@
-#include "UI.h"
+#include <DownloadWikiDump.h>
+#include <PageGraph.h>
+#include <PageLoader.h>
+#include <PathUtils.h>
+#include <UI.h>
+#include <UIBase.h>
+#include <WikiSelectUI.h>
+#include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <cctype>
@@ -14,14 +21,6 @@
 #include <thread>
 #include <utility>
 #include <vector>
-
-#include "DataLoader/PageLoader.h"
-#include "FetchWikiData/DownloadWikiDump.h"
-#include "PageGraph/PageGraph.h"
-#include "UIBase.h"
-#include "Utils/PathUtils.h"
-#include "WikiSelectUI.h"
-#include "spdlog/spdlog.h"
 
 using namespace ftxui;
 
@@ -151,6 +150,7 @@ Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Comp
             case UIStage::Done:
                 return text("Done") | border;
         }
+        std::unreachable();
     });
 
     // Wrap with event handling that delegates to the appropriate component

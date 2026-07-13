@@ -1,10 +1,10 @@
 #pragma once
 
-#include <memory>
+#include <DataLoaderBase.h>
+#include <Hashmap.h>
+#include <PageLoader.h>
 
-#include "DataLoaderBase.h"
-#include "PageLoader.h"
-#include "Utils/Hashmap.h"
+#include <memory>
 
 /**
  * @brief Loads linktarget table mapping IDs to page indices.

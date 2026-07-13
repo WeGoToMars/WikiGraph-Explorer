@@ -19,14 +19,14 @@ enum class EmhashImpl : uint8_t { emhash6, emhash8 };
 template <typename K, typename V, EmhashImpl Backend = EmhashImpl::emhash6>
 struct HashmapSelector;
 
-template <typename K, typename V> 
+template <typename K, typename V>
 struct HashmapSelector<K, V, EmhashImpl::emhash6> {
-  using type = emhash6::HashMap<K, V>;
+    using type = emhash6::HashMap<K, V>;
 };
 
-template <typename K, typename V> 
+template <typename K, typename V>
 struct HashmapSelector<K, V, EmhashImpl::emhash8> {
-  using type = emhash8::HashMap<K, V>;
+    using type = emhash8::HashMap<K, V>;
 };
 
 template <typename K, typename V, EmhashImpl Backend = EmhashImpl::emhash6>

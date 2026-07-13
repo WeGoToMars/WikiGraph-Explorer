@@ -1,9 +1,9 @@
 #pragma once
-#include <memory>
+#include <LinkLoader.h>
+#include <LinkTargetLoader.h>
+#include <PageLoader.h>
 
-#include "LinkLoader.h"
-#include "LinkTargetLoader.h"
-#include "PageLoader.h"
+#include <memory>
 
 // Manager class that coordinates all data loaders and handles memory management
 /**

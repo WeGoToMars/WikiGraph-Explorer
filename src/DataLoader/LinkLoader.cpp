@@ -1,9 +1,8 @@
-#include "LinkLoader.h"
+#include <FileReader/SQLParserUtils.h>
+#include <LinkLoader.h>
+#include <spdlog/spdlog.h>
 
 #include <chrono>
-
-#include "FileReader/SQLParserUtils.h"
-#include "spdlog/spdlog.h"
 
 std::vector<std::pair<uint32_t, uint64_t>> LinkLoader::parse_line(const std::string& line) {
     auto tuples = extract_tuples(line);
