@@ -5,7 +5,7 @@
 
 using ftxui::Component;
 
-#include "UIBase.h"
+#include <UIBase.h>
 
 // Timing functions
 /**

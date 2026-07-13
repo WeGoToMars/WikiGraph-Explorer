@@ -1,8 +1,6 @@
-#include "DataLoaderManager.h"
-
+#include <DataLoaderManager.h>
+#include <PageGraph.h>
 #include <spdlog/spdlog.h>
-
-#include "PageGraph/PageGraph.h"
 
 DataLoaderManager::DataLoaderManager()
     : page_loader_(std::make_unique<PageLoader>()),

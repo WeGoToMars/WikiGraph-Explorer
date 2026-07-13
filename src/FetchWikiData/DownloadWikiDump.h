@@ -1,8 +1,8 @@
 
+#include <UIBase.h>
+
 #include <atomic>
 #include <string>
-
-#include "../UI/UIBase.h"
 
 /**
  * @brief Container for dump URLs of a specific wiki and date.

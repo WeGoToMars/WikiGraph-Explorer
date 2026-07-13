@@ -7,19 +7,18 @@
 #include <thread>
 
 #ifdef PARALLEL_DECOMPRESSION
-#include "DataLoader/FileReader/ParallelLineReader.h"
+#include <ParallelLineReader.h>
 using ReaderType = ParallelLineReader;
+#include <WThreadPool.h>
 #include <concurrentqueue.h>
-
-#include "Utils/WThreadPool.h"
 #else
-#include "DataLoader/FileReader/AsyncLineReader.h"
+#include <AsyncLineReader.h>
 using ReaderType = AsyncLineReader;
 #endif
 
-#include <filesystem>
+#include <UIBase.h>
 
-#include "UI/UIBase.h"
+#include <filesystem>
 
 // Base class for all data loaders with common progress callback functionality
 class DataLoaderBase {

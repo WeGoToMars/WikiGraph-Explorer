@@ -1,5 +1,4 @@
-#include "FetchWikiStats.h"
-
+#include <FetchWikiStats.h>
 #include <cpr/cpr.h>
 
 #include <algorithm>

@@ -1,10 +1,10 @@
-#include <locale>
+#include <DataLoaderManager.h>
+#include <DownloadWikiDump.h>
+#include <FileLog.h>
+#include <PathUtils.h>
+#include <UI.h>
 
-#include "DataLoader/DataLoaderManager.h"
-#include "FetchWikiData/DownloadWikiDump.h"
-#include "Log/FileLog.h"
-#include "UI/UI.h"
-#include "Utils/PathUtils.h"
+#include <locale>
 
 int main() {
     init_logfile();

@@ -1,11 +1,11 @@
 #pragma once
+#include <DataLoaderBase.h>
+#include <Hashmap.h>
+#include <UIBase.h>
+
 #include <memory>
 #include <string>
 #include <vector>
-
-#include "DataLoaderBase.h"
-#include "UI/UIBase.h"
-#include "Utils/Hashmap.h"
 
 struct Page {
     std::string page_title;

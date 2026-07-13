@@ -28,7 +28,7 @@ class WThreadPool {
      * @param threads Number of worker threads to create
      */
     inline WThreadPool(size_t threads);
-    
+
     /**
      * Enqueues a task for execution by the thread pool.
      * @param func Function to execute
@@ -38,7 +38,7 @@ class WThreadPool {
     template <class F, class... Args>
     [[nodiscard]]
     auto enqueue(F&& func, Args&&... args) -> std::future<std::invoke_result_t<F, Args...>>;
-    
+
     /**
      * Destructor that gracefully shuts down all worker threads.
      */
@@ -51,9 +51,9 @@ class WThreadPool {
     WThreadPool& operator=(WThreadPool&&) = delete;
 
    private:
-    std::vector<std::thread> workers;  // Worker threads
+    std::vector<std::thread> workers;                          // Worker threads
     moodycamel::ConcurrentQueue<std::function<void()>> tasks;  // Task queue
-    std::atomic<bool> stop{false};  // Stop flag for graceful shutdown
+    std::atomic<bool> stop{false};                             // Stop flag for graceful shutdown
 };
 
 // Constructor: launches worker threads
@@ -90,10 +90,9 @@ auto WThreadPool::enqueue(F&& func, Args&&... args) -> std::future<std::invoke_r
 
     // Create packaged task with forwarding of arguments
     auto task = std::make_shared<std::packaged_task<return_type()>>(
-        [task_func = std::forward<F>(func), ...task_args = std::forward<Args>(args)]() mutable {
+        [task_func = std::forward<F>(func), ... task_args = std::forward<Args>(args)]() mutable {
             return std::invoke(std::move(task_func), std::move(task_args)...);
-        }
-    );
+        });
 
     // Get the future from the packaged task
     std::future<return_type> res = task->get_future();
@@ -112,7 +111,7 @@ auto WThreadPool::enqueue(F&& func, Args&&... args) -> std::future<std::invoke_r
 // Destructor: gracefully shut down all threads
 inline WThreadPool::~WThreadPool() {
     stop.store(true);
-    
+
     // Wait for all threads to finish
     for (std::thread& worker : workers) {
         if (worker.joinable()) {

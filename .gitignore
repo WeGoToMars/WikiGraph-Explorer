@@ -45,6 +45,7 @@
 .vs/
 build/
 vcpkg_installed
+compile_commands.json
 
 # runtime data
 data/

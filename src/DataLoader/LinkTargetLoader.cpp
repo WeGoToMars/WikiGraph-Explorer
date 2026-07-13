@@ -1,9 +1,9 @@
-#include "LinkTargetLoader.h"
+#include <FileReader/SQLParserUtils.h>
+#include <LinkTargetLoader.h>
+#include <spdlog/spdlog.h>
 
 #include <chrono>
-
-#include "FileReader/SQLParserUtils.h"
-#include "spdlog/spdlog.h"
+#include <tuple>
 
 LinkTargetLoader::LinkTargetLoader() : linktarget_map_(std::make_unique<Hashmap<uint64_t, uint32_t>>()) {}
 
@@ -35,7 +35,7 @@ void LinkTargetLoader::insert_linktargets(const std::vector<std::pair<uint64_t, 
     for (const auto& [lt_id, lt_title] : linktargets) {
         uint32_t page_index = 0;
         if (page_loader.find_page_index_by_title(lt_title, page_index)) {
-            linktarget_map_->emplace(lt_id, page_index);
+            std::ignore = linktarget_map_->emplace(lt_id, page_index);
             linktargets_mapped_++;
         } else {
             title_not_found_in_pages_++;

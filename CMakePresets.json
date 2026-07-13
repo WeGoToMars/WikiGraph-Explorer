@@ -47,8 +47,7 @@
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS_RELEASE": "-Wall -Wextra -Wpedantic -O3 -flto=thin -ffast-math -funroll-loops -fstrict-aliasing -DNDEBUG",
-        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "-flto=thin",
+        "CMAKE_CXX_FLAGS_RELEASE": "-Wall -Wextra -Wpedantic -O3 -flto -ffast-math -funroll-loops -fstrict-aliasing -DNDEBUG",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
         "CPR_USE_SYSTEM_CURL": "ON",
@@ -145,4 +144,4 @@
       "configuration": "Release"
     }
   ]
-} 
+}

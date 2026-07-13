@@ -1,11 +1,10 @@
 #ifndef PARALLEL_DECOMPRESSION
 
-#include "AsyncLineReader.h"
+#include <AsyncLineReader.h>
+#include <spdlog/spdlog.h>
 
 #include <filesystem>
 #include <vector>
-
-#include "spdlog/spdlog.h"
 
 AsyncLineReader::AsyncLineReader(const WikiFile& file) : file_(file), total_bytes_(0), gz_file_(nullptr) {
     calculate_total_bytes();

@@ -1,6 +1,7 @@
 #ifdef PARALLEL_DECOMPRESSION
 
-#include "ParallelLineReader.h"
+#include <ParallelLineReader.h>
+#include <spdlog/spdlog.h>
 
 #include <cstring>  // for memchr
 #include <filereader/Standard.hpp>
@@ -9,8 +10,6 @@
 #include <rapidgzip/DecodedData.hpp>
 #include <rapidgzip/ParallelGzipReader.hpp>
 #include <thread>
-
-#include "spdlog/spdlog.h"
 
 ParallelLineReader::ParallelLineReader(const WikiFile& file, size_t parallelization, size_t chunk_size)
     : file_(file), parallelization_(parallelization), chunk_size_(chunk_size) {

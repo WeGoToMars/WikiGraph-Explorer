@@ -1,10 +1,10 @@
-#include "PageLoader.h"
+#include <FileReader/SQLParserUtils.h>
+#include <PageLoader.h>
+#include <spdlog/spdlog.h>
 
 #include <chrono>
 #include <string_view>
-
-#include "FileReader/SQLParserUtils.h"
-#include "spdlog/spdlog.h"
+#include <tuple>
 
 std::vector<std::pair<uint32_t, Page>> PageLoader::parse_line(const std::string& line) {
     auto tuples = extract_tuples(line);
@@ -37,8 +37,8 @@ void PageLoader::insert_pages(const std::vector<std::pair<uint32_t, Page>>& batc
         const auto& [page_id, page] = batch[i];
         const auto index = static_cast<uint32_t>(start_index + i);
         pages_.emplace_back(page.page_title, page.page_is_redirect);
-        page_id_to_index_->emplace(page_id, index);
-        page_title_to_index_->emplace(page.page_title, index);
+        std::ignore = page_id_to_index_->emplace(page_id, index);
+        std::ignore = page_title_to_index_->emplace(page.page_title, index);
     }
 }
 

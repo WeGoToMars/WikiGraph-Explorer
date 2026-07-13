@@ -1,13 +1,13 @@
 #pragma once
 
+#include <FetchWikiStats.h>
+#include <UIBase.h>
+
 #include <ftxui/component/component_base.hpp>
 #include <functional>
 #include <map>
 #include <string>
 #include <vector>
-
-#include "FetchWikiData/FetchWikiStats.h"
-#include "UI/UIBase.h"
 
 using ftxui::Component;
 

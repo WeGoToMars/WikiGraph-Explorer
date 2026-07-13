@@ -2,15 +2,15 @@
 
 #ifndef PARALLEL_DECOMPRESSION
 
+#include <UIBase.h>
+#include <zlib.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 #include <queue>
 #include <string>
 #include <thread>
-
-#include "UI/UIBase.h"
-#include <zlib.h>
 
 /**
  * @class AsyncLineReader

@@ -1,6 +1,6 @@
-#include "DownloadWikiDump.h"
-
+#include <DownloadWikiDump.h>
 #include <cpr/cpr.h>
+#include <spdlog/spdlog.h>
 
 #include <atomic>
 #include <chrono>
@@ -8,8 +8,6 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
-
-#include "spdlog/spdlog.h"
 
 void download_file(std::string url, std::string output_filename, std::atomic<UIState::DownloadProgress>& dp,
                    std::chrono::milliseconds refresh_rate) {

@@ -1,12 +1,11 @@
-#include "SQLParserUtils.h"
+#include <SQLParserUtils.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <fstream>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include "spdlog/spdlog.h"
 
 SQLTupleParser::SQLTupleParser(std::string_view tuple) : m_tuple(tuple) {};
 
