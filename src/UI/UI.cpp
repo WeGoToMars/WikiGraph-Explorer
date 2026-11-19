@@ -312,19 +312,14 @@ Element render_download_ui(UIState& state) {
     if (!state.download.error.empty()) {
         return vbox({create_text("Download Error", true), separator(),
                      create_text(state.download.error, false, Color::Red), separator(),
-                     state.download.running > 0
-                         ? text("Stopping the other downloads...")
-                         : text("Press any key to return to the wiki list. Finished files and partial "
-                                "downloads are kept, so selecting the wiki again resumes.")}) |
+                     state.download.running > 0 ? text("Stopping the other downloads...")
+                                                : text("Press any key to go back.")}) |
                border;
     }
     if (state.going_back)
         return status_box("Downloading " + wiki, "Stopping the downloads (partial files are kept)...", Color::Yellow);
     if (state.selected.date.empty())
-        return vbox({create_text("Downloading " + wiki, true), separator(),
-                     create_text("Finding the latest complete dump...", false, Color::Yellow), separator(),
-                     hint("Esc: back to the wiki list")}) |
-               border;
+        return status_box("Downloading " + wiki, "Finding the latest complete dump...", Color::Yellow);
 
     double total_speed = 0;
     for (const auto& f : state.download.files) total_speed += static_cast<double>(f.progress.load().dlspeed);
@@ -342,8 +337,6 @@ Element render_download_ui(UIState& state) {
         elements.push_back(text(label));
         elements.push_back(render_download_progress(state.download.file(type).progress.load()));
     }
-    elements.push_back(separator());
-    elements.push_back(hint("Esc: back to the wiki list (partial downloads are kept and resume next time)"));
     return vbox(std::move(elements)) | border;
 }
 }  // namespace
@@ -438,7 +431,6 @@ Element render_build_steps(const UIState& state, const std::string& wiki) {
     if (!has_redirects)
         elements.push_back(
             create_text("No redirect dump for this wiki: links through redirects are dropped.", false, Color::Yellow));
-    elements.push_back(hint("Esc: cancel and go back to the wiki list (the build starts over next time)"));
     return vbox(std::move(elements)) | border;
 }
 
@@ -502,7 +494,7 @@ Component create_progress_ui(UIState& state) {
     return Renderer(Container::Vertical({}), [&state] {
         if (!state.prepare.error.empty())
             return vbox({create_text("Could not prepare the graph", true, Color::Red), separator(),
-                         paragraph(state.prepare.error), separator(), hint("Esc: back to the wiki list")}) |
+                         paragraph(state.prepare.error)}) |
                    border;
         if (state.stage.load() == UIStage::PrepareGraph) return render_preparing(state);
         return render_graph_ready(state);
@@ -573,17 +565,15 @@ Component create_input_ui(UIState& state) {
                     cache->titles.push_back(state.graph->display_title(id));
         }
         Elements lines = {create_text("Enter two page titles:", true), separator(),
-                          hbox({text("Start: "), input_start->Render()}), hbox({text("End:   "), input_end->Render()}),
-                          separator()};
+                          hbox({text("Start: "), input_start->Render()}), hbox({text("End:   "), input_end->Render()})};
         if (!cache->titles.empty()) {
-            lines.push_back(hbox({hint("Suggestions: "), paragraph(string_utils::join(cache->titles, "  ·  "))}));
             lines.push_back(separator());
+            lines.push_back(hbox({hint("Suggestions: "), paragraph(string_utils::join(cache->titles, "  ·  "))}));
         }
-        lines.push_back(!s.error.empty()
-                            ? create_text(s.error, false, Color::Red)
-                            : create_text("Enter: next field, then search | Tab: complete the title, or switch field | "
-                                          "Esc: back to the wiki list",
-                                          false, Color::Yellow));
+        if (!s.error.empty()) {
+            lines.push_back(separator());
+            lines.push_back(create_text(s.error, false, Color::Red));
+        }
         return vbox(std::move(lines)) | border;
     });
 }
@@ -677,8 +667,7 @@ namespace {
 Element render_search_progress(const wg::SearchProgress& p) {
     return vbox({create_text("Searching...", true, Color::Yellow), separator(),
                  text(std::format("Levels: {} forward, {} backward | frontier {:L} | lists read {:L}", p.forward_depth,
-                                  p.backward_depth, p.frontier, p.lists_expanded)),
-                 separator(), hint("Esc: cancel the search")}) |
+                                  p.backward_depth, p.frontier, p.lists_expanded))}) |
            border;
 }
 
@@ -696,13 +685,6 @@ Element render_path_list(const UIState& state) {
     return vbox(std::move(rows)) | vscroll_indicator | frame | flex;
 }
 
-/// The results box, with the keys that apply below it.
-Element results_box(Elements elements) {
-    elements.push_back(separator());
-    elements.push_back(hint("Up/Down, PgUp/PgDn, Home/End: scroll | any letter: new search | Esc: edit this search"));
-    return vbox(std::move(elements)) | border;
-}
-
 Element render_results(const UIState& state) {
     const SearchState& search = state.search;
     const wg::PathResult& r = search.result;
@@ -710,7 +692,7 @@ Element render_results(const UIState& state) {
         hbox({create_text("Shortest paths", true), hint(std::format(" (in {:.2f} ms)", r.milliseconds))}), separator()};
     if (!search.error.empty()) {
         elements.push_back(paragraph(search.error) | color(Color::Red));
-        return results_box(std::move(elements));
+        return vbox(std::move(elements)) | border;
     }
     const std::string count =
         r.path_count == UINT64_MAX ? "more than 18 quintillion" : std::format("{:L}", r.path_count);
@@ -724,7 +706,7 @@ Element render_results(const UIState& state) {
     elements.push_back(render_path_list(state));
     if (r.path_count > r.paths.size())
         elements.push_back(hint(std::format("Listing the first {:L} of {} paths", r.paths.size(), count)));
-    return results_box(std::move(elements));
+    return vbox(std::move(elements)) | border;
 }
 }  // namespace
 

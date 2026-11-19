@@ -247,8 +247,7 @@ Element render_wiki_list(const UIState& state, const WikiListRows& rows) {
         status = text(" (offline mode)") | color(Color::Red1);
     return vbox({hbox({text("Select Wikipedia Language") | bold, status}), separator(), render_header(), separator(),
                  render_rows(rows, selected) | vscroll_indicator | frame | flex, separator(),
-                 text(std::format("[{}/{}]: Enter to select, q or Esc to quit", selected + 1, rows.size())) |
-                     color(Color::GrayDark)}) |
+                 text(std::format("{}/{}", selected + 1, rows.size())) | color(Color::GrayDark)}) |
            border;
 }
 
