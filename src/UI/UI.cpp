@@ -379,7 +379,7 @@ Component create_download_ui(UIState& state) {
 
 namespace {
 /// Graph thread: build the graph if it is missing or out of date, then open it.
-void prepare_graph(UIState& state, const wg::DumpFiles& dumps, std::stop_token stop) {
+void prepare_graph(UIState& state, const wg::DumpFiles& dumps, uint64_t budget, std::stop_token stop) {
     PrepareState& prepare = state.prepare;
     const ScopeExit done{[&prepare] { prepare.running = false; }};
     try {
@@ -395,7 +395,7 @@ void prepare_graph(UIState& state, const wg::DumpFiles& dumps, std::stop_token s
         prepare.building = false;
         post_ui_refresh();
         if (stop.stop_requested()) return;
-        state.graph->open(wg::graph_dir_for(dumps), state.ram_budget);
+        state.graph->open(wg::graph_dir_for(dumps), budget);
         post_to_ui([&state] {
             if (!state.going_back) state.stage = UIStage::UserInput;  // otherwise going back closes the graph
         });
@@ -485,9 +485,9 @@ void start_preparing_graph(UIState& state) {
     prepare.stop = std::stop_source{};
     prepare.error.clear();
     prepare.built.reset();
-    spawn(state, [&state, dumps = state.selected.wiki.dump_files(), stop = prepare.stop.get_token()] {
-        prepare_graph(state, dumps, stop);
-    });
+    // The budget is copied: the wiki list can change state.ram_budget while this thread runs
+    spawn(state, [&state, dumps = state.selected.wiki.dump_files(), budget = state.ram_budget,
+                  stop = prepare.stop.get_token()] { prepare_graph(state, dumps, budget, stop); });
 }
 
 Component create_progress_ui(UIState& state) {

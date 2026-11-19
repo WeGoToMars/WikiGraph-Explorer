@@ -25,6 +25,7 @@
 
 #include "FetchWikiData/DownloadWikiDump.h"
 #include "FetchWikiData/FetchWikiStats.h"
+#include "Graph/Budget.h"
 #include "UI.h"
 #include "UI/UIBase.h"
 #include "Utils/PathUtils.h"
@@ -34,6 +35,19 @@ using namespace ftxui;
 namespace wg::app {
 
 namespace {
+
+/// RAM budgets the wiki list cycles through with r (forward) and R (back)
+constexpr std::array<uint64_t, 7> kBudgetChoices{wg::kBudgetAuto, wg::kBudgetAll, 8'000'000'000, 4'000'000'000,
+                                                 2'000'000'000,   1'000'000'000,  500'000'000};
+
+/// The next (step = 1) or previous (step = -1) budget choice. A budget from --ram-budget that is not one of the
+/// choices continues from "auto".
+uint64_t cycle_budget(uint64_t current, int step) {
+    const auto it = std::ranges::find(kBudgetChoices, current);
+    const auto n = static_cast<std::ptrdiff_t>(kBudgetChoices.size());
+    const std::ptrdiff_t i = it == kBudgetChoices.end() ? 0 : it - kBudgetChoices.begin();
+    return kBudgetChoices[static_cast<size_t>((i + step + n) % n)];
+}
 
 // ------------------------------------------------------------------------------------------------ downloaded wikis
 
@@ -177,6 +191,11 @@ bool handle_list_event(Event event, UIState& state, const WikiListRows& rows) {
         if (auto* screen = App::Active()) screen->Exit();
         return true;
     }
+    // RAM budget for the next wiki opened (going back to this list closes the open graph)
+    if (event.character() == "r" || event.character() == "R") {
+        state.ram_budget = cycle_budget(state.ram_budget, event.character() == "r" ? 1 : -1);
+        return true;
+    }
     if (event.is_mouse()) return scroll_list(event.mouse(), state, rows);
     if (event == Event::Return && rows.size() != 0) {
         open_selected(state, rows);
@@ -245,7 +264,9 @@ Element render_wiki_list(const UIState& state, const WikiListRows& rows) {
         status = text(" (loading the list of Wikipedias...)") | color(Color::Yellow);
     else if (state.wikis.offline)
         status = text(" (offline mode)") | color(Color::Red1);
-    return vbox({hbox({text("Select Wikipedia Language") | bold, status}), separator(), render_header(), separator(),
+    return vbox({hbox({text("Select Wikipedia Language") | bold, status, filler(),
+                       text("RAM budget: " + wg::budget_to_string(state.ram_budget)) | color(Color::GrayDark)}),
+                 separator(), render_header(), separator(),
                  render_rows(rows, selected) | vscroll_indicator | frame | flex, separator(),
                  text(std::format("{}/{}", selected + 1, rows.size())) | color(Color::GrayDark)}) |
            border;

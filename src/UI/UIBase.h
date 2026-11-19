@@ -169,7 +169,7 @@ struct SearchState {
 /// started and never reads these members.
 struct UIState {
     std::atomic<UIStage> stage{UIStage::WikiSelection};
-    uint64_t ram_budget = wg::kBudgetAuto;  ///< for the graphs opened (--ram-budget)
+    uint64_t ram_budget = wg::kBudgetAuto;  ///< for the next graph opened (--ram-budget, r/R in the wiki list)
     bool force_rebuild = false;             ///< --rebuild
 
     WikiListState wikis;

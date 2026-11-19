@@ -51,7 +51,7 @@ The first time a wiki is opened, its dumps are turned into a compact graph cache
 ### Keys
 | Where | Keys |
 |---|---|
-| Wiki list | Up/Down, PgUp/PgDn, mouse wheel: move · Enter: download or open · q or Esc: quit |
+| Wiki list | Up/Down, PgUp/PgDn, mouse wheel: move · Enter: download or open · r / R: next / previous RAM budget for the wiki you open (auto, all, 8, 4, 2, 1, 0.5 GB; starts at `--ram-budget`) · q or Esc: quit |
 | Downloading, building the graph | Esc: stop and go back to the wiki list (downloads resume next time; a build starts over) |
 | Title input | Enter: next field, then search · Tab: complete the title to the most linked-to article, or switch field · Esc: back to the wiki list |
 | Results | Up/Down, PgUp/PgDn, Home/End, mouse wheel: scroll · Esc: edit the search · any letter: start a new search |
