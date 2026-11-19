@@ -107,7 +107,13 @@ Open the cloned directory in Visual Studio 2022 or later. VS should automaticall
     - If CMake still can't find packages make sure the VCPKG_ROOT environment variable is set correctly
 2. After CMake has finished running, select startup item wikigraph.exe
 
-
+### Tests
+The core has unit and integration tests. CMake fetches Catch2 for them, and Python 3 writes the small synthetic wiki they read:
+```
+cmake --preset release -DWIKIGRAPH_TESTS=ON
+cmake --build build/release
+ctest --test-dir build/release --output-on-failure
+```
 
 ## Data source
 Wikipedia's compressed dump data is fetched directly from Wikimedia's public servers. The tool automatically downloads the required files for the selected language:

@@ -89,3 +89,10 @@ target_link_libraries(wikigraph_fetch PUBLIC wikigraph_core cpr::cpr spdlog::spd
 
 add_executable(wikigraph ${APP_SOURCES})
 target_link_libraries(wikigraph PRIVATE wikigraph_fetch ftxui::component wikigraph_warnings)  # fetch brings the core
+
+# Unit and integration tests of the core (tests/). Off by default; the CI enables it.
+option(WIKIGRAPH_TESTS "Build the tests (fetches Catch2)" OFF)
+if(WIKIGRAPH_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
