@@ -1,51 +1,23 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
-
-# debug information files
-*.dwo
-
-# excluded development folders
-.cache/
-.vs/
+# Build trees (one per CMake preset)
 build/
-vcpkg_installed
+out/
 
-# runtime data
+# Symlink to build/<preset>/compile_commands.json for clangd; create it locally
+compile_commands.json
+
+# Downloaded dumps, built graphs and logs (when the data folder is inside the checkout)
 data/
 logs/
+resources/
+*.part
+
+# Editors and OS
+.DS_Store
+.vscode/
+.idea/
+.cache/
+*.swp
+
+# LLVM coverage and profile output
+*.profraw
+*.profdata

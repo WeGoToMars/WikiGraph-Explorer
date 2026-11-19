@@ -1,0 +1,55 @@
+---
+# Naming convention used in src/ (see README "Code style"):
+#   functions, variables, parameters, members, namespaces: lower_case
+#   classes, structs, enums, type aliases, concepts:       CamelCase
+#   enum values:                                           CamelCase
+#   constants (constexpr / static const):                  kCamelCase
+#   private and protected data members:                    lower_case_
+# Left out as noise for this code base: easily-swappable-parameters; signed-bitwise (flags every hex mask on an
+# int literal); exception-escape (background lambdas are wrapped by BackgroundThreads, which tidy cannot see).
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-signed-bitwise,
+  -bugprone-exception-escape,
+  performance-*,
+  readability-identifier-naming,
+  modernize-use-nullptr,
+  modernize-use-override,
+  misc-unused-using-decls,
+  readability-function-size,
+  readability-function-cognitive-complexity
+WarningsAsErrors: ''
+HeaderFilterRegex: '^.*/src/.*'
+CheckOptions:
+  - { key: readability-function-size.LineThreshold,                value: 80 }
+  - { key: readability-function-cognitive-complexity.Threshold,    value: 25 }
+  - { key: readability-function-cognitive-complexity.IgnoreMacros, value: true }
+  - { key: readability-identifier-naming.NamespaceCase,            value: lower_case }
+  - { key: readability-identifier-naming.ClassCase,                value: CamelCase }
+  - { key: readability-identifier-naming.StructCase,               value: CamelCase }
+  - { key: readability-identifier-naming.EnumCase,                 value: CamelCase }
+  - { key: readability-identifier-naming.EnumConstantCase,         value: CamelCase }
+  - { key: readability-identifier-naming.TypeAliasCase,            value: CamelCase }
+  - { key: readability-identifier-naming.TypedefCase,              value: CamelCase }
+  - { key: readability-identifier-naming.ConceptCase,              value: CamelCase }
+  - { key: readability-identifier-naming.TemplateParameterCase,    value: CamelCase }
+  - { key: readability-identifier-naming.FunctionCase,             value: lower_case }
+  - { key: readability-identifier-naming.MethodCase,               value: lower_case }
+  - { key: readability-identifier-naming.VariableCase,             value: lower_case }
+  - { key: readability-identifier-naming.ParameterCase,            value: lower_case }
+  - { key: readability-identifier-naming.MemberCase,               value: lower_case }
+  - { key: readability-identifier-naming.PrivateMemberCase,        value: lower_case }
+  - { key: readability-identifier-naming.PrivateMemberSuffix,      value: _ }
+  - { key: readability-identifier-naming.ProtectedMemberCase,      value: lower_case }
+  - { key: readability-identifier-naming.ProtectedMemberSuffix,    value: _ }
+  - { key: readability-identifier-naming.ConstexprVariableCase,    value: CamelCase }
+  - { key: readability-identifier-naming.ConstexprVariablePrefix,  value: k }
+  - { key: readability-identifier-naming.GlobalConstantCase,       value: CamelCase }
+  - { key: readability-identifier-naming.GlobalConstantPrefix,     value: k }
+  - { key: readability-identifier-naming.StaticConstantCase,       value: CamelCase }
+  - { key: readability-identifier-naming.StaticConstantPrefix,     value: k }
+  - { key: readability-identifier-naming.FunctionIgnoredRegexp,    value: '^main$' }
+  # std::stop_token is passed by value, as the standard library does (jthread, condition_variable_any::wait)
+  - { key: performance-unnecessary-value-param.AllowedTypes,       value: '^std::stop_token$' }
