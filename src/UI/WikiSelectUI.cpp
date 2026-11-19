@@ -8,10 +8,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
+#include <ftxui/component/app.hpp>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
-#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/table.hpp>
 #include <map>
@@ -174,7 +174,7 @@ bool scroll_list(const Mouse& mouse, UIState& state, const WikiListRows& rows) {
 // `event` by value: Event::mouse() is not const
 bool handle_list_event(Event event, UIState& state, const WikiListRows& rows) {
     if (event.character() == "q") {
-        if (auto* screen = ScreenInteractive::Active()) screen->Exit();
+        if (auto* screen = App::Active()) screen->Exit();
         return true;
     }
     if (event.is_mouse()) return scroll_list(event.mouse(), state, rows);

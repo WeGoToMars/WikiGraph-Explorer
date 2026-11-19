@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <format>
-#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/component/app.hpp>
 #include <functional>
 #include <optional>
 #include <stop_token>
@@ -200,12 +200,12 @@ struct UIState {
 
 /// Request a redraw from any thread (dropped if the UI is not running).
 inline void post_ui_refresh() {
-    if (auto* screen = ftxui::ScreenInteractive::Active()) screen->PostEvent(ftxui::Event::Custom);
+    if (auto* screen = ftxui::App::Active()) screen->PostEvent(ftxui::Event::Custom);
 }
 
 /// Run `task` on the UI thread, then redraw (dropped if the UI is not running).
 inline void post_to_ui(std::function<void()> task) {
-    if (auto* screen = ftxui::ScreenInteractive::Active()) {
+    if (auto* screen = ftxui::App::Active()) {
         screen->Post(std::move(task));
         screen->PostEvent(ftxui::Event::Custom);
     }

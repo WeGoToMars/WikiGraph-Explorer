@@ -10,10 +10,10 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <ftxui/component/app.hpp>
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/event.hpp>
 #include <ftxui/component/mouse.hpp>
-#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
 #include <functional>
@@ -105,7 +105,7 @@ class Throttle {
 
 void run_ui(UIState& state) {
     // Use fullscreen for all stages for consistent behavior
-    ScreenInteractive screen = ScreenInteractive::Fullscreen();
+    App screen = App::Fullscreen();
 
     // The list of Wikipedias takes an HTTP request: show the downloaded wikis meanwhile. The wiki list picks the
     // result up when it is drawn next (a refresh posted before the loop starts would be dropped, the flag is not).
@@ -793,7 +793,7 @@ bool handle_key_events(const Event& event, UIState& state) {
     const UIStage stage = state.stage.load();
     if (stage == UIStage::WikiSelection) {
         if (event != Event::Escape) return false;
-        ScreenInteractive::Active()->Exit();
+        App::Active()->Exit();
         return true;
     }
     if (stage == UIStage::ShowPaths) return handle_results_key(event, state);

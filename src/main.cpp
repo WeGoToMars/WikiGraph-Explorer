@@ -329,7 +329,7 @@ int main(int argc, char** argv) {
     try {
         wg::app::run_ui(state);
     } catch (const std::exception& e) {
-        // The screen has been restored by now (ScreenInteractive's destructor). Stop the background work before
+        // The screen has been restored by now (App's destructor). Stop the background work before
         // `graph` and `state` go away, then report.
         state.stop_all();
         state.threads.join_all();

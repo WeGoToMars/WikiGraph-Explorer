@@ -20,7 +20,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 include(FetchContent)
 FetchContent_Declare(ftxui
   GIT_REPOSITORY    "https://github.com/ArthurSonzogni/ftxui"
-  GIT_TAG v6.1.9
+  GIT_TAG           "v7.0.3"
   SYSTEM
 )
 FetchContent_MakeAvailable(ftxui)
@@ -31,7 +31,7 @@ find_package(ZLIB REQUIRED)
 # libcurl wrapper for downloading wikipedia dumps
 FetchContent_Declare(cpr
   GIT_REPOSITORY    "https://github.com/libcpr/cpr"
-  GIT_TAG           "1.12.0"
+  GIT_TAG           "1.15.1"
   SYSTEM
 )
 # Use the system's libcurl: building curl needs libpsl, which needs meson. Must be set before cpr is configured.
@@ -41,7 +41,7 @@ FetchContent_MakeAvailable(cpr)
 # Logging library
 FetchContent_Declare(spdlog
   GIT_REPOSITORY    "https://github.com/gabime/spdlog"
-  GIT_TAG           "v1.15.3"
+  GIT_TAG           "v1.17.0"
   SYSTEM
 )
 FetchContent_MakeAvailable(spdlog)
