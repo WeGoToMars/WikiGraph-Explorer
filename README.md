@@ -1,4 +1,6 @@
 # WikiGraph Explorer
+[![Build](https://github.com/WeGoToMars/WikiGraph-Explorer/actions/workflows/build.yml/badge.svg)](https://github.com/WeGoToMars/WikiGraph-Explorer/actions/workflows/build.yml)
+
 Explore any Wikipedia as an interconnected graph of articles!
 
 Inspired by https://github.com/jwngr/sdow, written in C++ for blazing fast performance 🔥! It builds a compact on-disk graph, searches it in about a millisecond, and can stay within a RAM budget you choose by reading the rest of the graph from the SSD. It uses multithreading and modern C++23 features.
