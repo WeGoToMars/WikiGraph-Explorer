@@ -1,162 +1,214 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <map>
+#include <format>
+#include <ftxui/component/screen_interactive.hpp>
+#include <functional>
+#include <optional>
+#include <stop_token>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
-// Forward declarations
-struct Page;
-struct DownloadURLs;
-struct WikiEntry;
-class PageLoader;
+#include "FetchWikiData/DownloadWikiDump.h"
+#include "FetchWikiData/FetchWikiStats.h"
+#include "Graph/GraphBuilder.h"
+#include "Graph/GraphStore.h"
+#include "UI/BackgroundThreads.h"
 
-#include <ftxui/component/screen_interactive.hpp>
-
-struct ReadProgress {
-    uint64_t total_bytes;    // Total compressed file size in bytes
-    uint64_t current_bytes;  // Current position in compressed file in bytes
-};
+namespace wg::app {
 
 // UI stage enum
 enum class UIStage : uint8_t {
     WikiSelection,
     Download,
-    LoadPages,
-    LoadLinkTargets,
-    LoadLinks,
-    BuildingGraph,
+    PrepareGraph,  // building the graph from the dumps (first run) or opening it
     UserInput,
     ShowPaths,
-    Done
 };
 
 // The type of file in the wikipedia dump
-enum class WikiFileType : uint8_t { Page, LinkTarget, PageLinks };
+enum class WikiFileType : uint8_t { Page, LinkTarget, PageLinks, Redirect };
+inline constexpr size_t kWikiFileTypes = 4;
 
-/**
- * @brief Mapping from file type string tokens to `WikiFileType` enum values.
- */
-[[maybe_unused]]
-static std::map<std::string, WikiFileType> wiki_file_type_map() {
-    return {
-        {"page", WikiFileType::Page},
-        {"linktarget", WikiFileType::LinkTarget},
-        {"pagelinks", WikiFileType::PageLinks},
-    };
+/// The type's token in dump file names, "<db>wiki-<date>-<token>.sql.gz"; indexed by WikiFileType
+inline constexpr std::array<std::string_view, kWikiFileTypes> kWikiFileTokens = {"page", "linktarget", "pagelinks",
+                                                                                 "redirect"};
+
+/// The file type of a token in a dump file name ("pagelinks" -> PageLinks).
+inline std::optional<WikiFileType> wiki_file_type(std::string_view token) {
+    const auto it = std::ranges::find(kWikiFileTokens, token);
+    if (it == kWikiFileTokens.end()) return std::nullopt;
+    return static_cast<WikiFileType>(it - kWikiFileTokens.begin());
+}
+
+/// Dump file name, e.g. "enwiki-20261101-pagelinks.sql.gz" for ("en", "20261101", PageLinks).
+inline std::string dump_file_name(std::string_view db, std::string_view date, WikiFileType type) {
+    return std::format("{}wiki-{}-{}.sql.gz", db, date, kWikiFileTokens[std::to_underlying(type)]);
 }
 
 struct WikiFile {
     bool exists = false;
-
-    std::string lang_code;
-    std::string date;
-    WikiFileType file_type;
-
-    uint64_t file_size;
-
     std::filesystem::path data_path;
-    std::filesystem::path index_path;
 };
 
-/// @brief Structure representing a downloaded wiki with its metadata
+/// Structure representing a downloaded wiki with its metadata
 struct DownloadedWiki {
-    std::string language_code;
+    std::string language_code;  ///< database prefix, as in the file names ("en", "zh_min_nan")
     std::string date;
-    uint64_t size_on_disk;
+    std::array<WikiFile, kWikiFileTypes> files;  ///< indexed by WikiFileType; use file()
 
-    WikiFile page;
-    WikiFile linktarget;
-    WikiFile pagelinks;
+    [[nodiscard]] auto& file(this auto& self, WikiFileType type) { return self.files[std::to_underlying(type)]; }
+
+    /// Page, link target and page links are needed; the redirect dump is optional (older downloads lack it)
+    [[nodiscard]] bool complete() const {
+        return file(WikiFileType::Page).exists && file(WikiFileType::LinkTarget).exists &&
+               file(WikiFileType::PageLinks).exists;
+    }
+
+    [[nodiscard]] wg::DumpFiles dump_files() const {
+        const WikiFile& redirect = file(WikiFileType::Redirect);
+        return {file(WikiFileType::Page).data_path, file(WikiFileType::LinkTarget).data_path,
+                file(WikiFileType::PageLinks).data_path,
+                redirect.exists ? redirect.data_path : std::filesystem::path{}};
+    }
 };
 
-// The main UI state struct
+/// The wiki list (UIStage::WikiSelection).
+struct WikiListState {
+    std::vector<WikiEntry> entries;  ///< every Wikipedia, from WikiStats; empty until fetched (or offline)
+    bool loading = true;
+    bool offline = false;            ///< the list could not be fetched
+    std::vector<WikiEntry> fetched;  ///< written by the fetch thread before it sets `fetched_ready`
+    std::atomic<bool> fetched_ready{false};
+    int selected_index = 0;
+    bool rescan = false;  ///< rescan the data folder before drawing the list again
+};
+
+/// The wiki chosen in the list.
+struct SelectedWiki {
+    std::string prefix;   ///< database prefix ("en", "zh_min_nan")
+    std::string date;     ///< empty while a download is still looking for the latest dump
+    DownloadedWiki wiki;  ///< its files, once they are all downloaded
+};
+
+/// Downloading the dumps (UIStage::Download).
+struct DownloadState {
+    struct File {
+        std::atomic<DownloadProgress> progress{DownloadProgress{}};
+        std::atomic<bool> complete{false};
+    };
+    std::array<File, kWikiFileTypes> files;  ///< indexed by WikiFileType; use file()
+    std::string error;
+    std::atomic<int> running{0};           ///< threads looking up the dump or downloading
+    std::stop_source stop;                 ///< stopped on Esc, on exit, and by a download that fails
+    std::atomic<bool> handed_over{false};  ///< the last download to finish starts the graph, once
+
+    [[nodiscard]] File& file(WikiFileType type) { return files[std::to_underlying(type)]; }
+};
+
+/// Building the graph from the dumps if needed, then opening it (UIStage::PrepareGraph). The atomics are written by
+/// the graph thread.
+struct PrepareState {
+    std::atomic<bool> running{false};
+    std::atomic<bool> building{false};  ///< false while the graph is only being opened
+    std::stop_source stop;
+    std::atomic<wg::BuildProgress> progress{wg::BuildProgress{}};
+    std::chrono::steady_clock::time_point started{};
+    std::optional<wg::BuildReport> built;  ///< set if a build ran; written before the stage becomes UserInput
+    std::string error;
+};
+
+/// The title inputs (UIStage::UserInput) and the search and its results (UIStage::ShowPaths).
+struct SearchState {
+    std::string start_title, end_title;
+    int start_cursor = 0, end_cursor = 0;  ///< cursor positions in the two inputs (byte offsets)
+    bool focus_start = true;               ///< give the start field the focus when the input is drawn next (new search)
+
+    std::atomic<bool> running{false};
+    std::atomic<wg::SearchProgress> progress{wg::SearchProgress{}};
+    std::stop_source stop;
+    std::string redirect_note;  ///< "USA redirects to United States", for titles that were redirects
+    /// A problem with the titles, or written by the search thread before `running` goes false
+    std::string error;
+    wg::PathResult result;  ///< written by the search thread before `running` goes false
+    int result_cursor = 0;  ///< highlighted path; the list scrolls to keep it visible
+    static constexpr size_t kPathsListed = 1000;
+
+    /// Forget the result (and any error), keeping the titles.
+    void clear_result() {
+        result = wg::PathResult{};
+        result_cursor = 0;
+        error.clear();
+    }
+
+    /// Start over: empty titles, or `start` typed into the start field, and no result.
+    void new_search(std::string start = {}) {
+        start_title = std::move(start);
+        end_title.clear();
+        start_cursor = static_cast<int>(start_title.size());
+        end_cursor = 0;
+        focus_start = true;
+        clear_result();
+    }
+};
+
+/// State shared by the UI thread and the background threads it starts.
+///
+/// Atomics may be touched from any thread. Plain members belong to the UI thread; background threads change them
+/// only through post_to_ui(), except where a comment says otherwise.
+///
+/// Each kind of background work has a std::stop_source. The UI thread replaces it with a fresh one when it starts
+/// that work, and requests a stop on Esc and on exit. A background thread gets a copy (or a token) when it is
+/// started and never reads these members.
 struct UIState {
-    bool offline_mode = false;
-
-    // Progress counters
-    std::atomic<size_t> page_count{0};
-    std::atomic<uint32_t> page_speed{0};
-    std::atomic<ReadProgress> page_progress{ReadProgress{.total_bytes = 0, .current_bytes = 0}};
-    std::atomic<size_t> linktarget_count{0};
-    std::atomic<uint32_t> linktarget_speed{0};
-    std::atomic<ReadProgress> linktarget_progress{ReadProgress{.total_bytes = 0, .current_bytes = 0}};
-    std::atomic<size_t> link_count{0};
-    std::atomic<uint32_t> link_speed{0};
-    std::atomic<ReadProgress> link_progress{ReadProgress{.total_bytes = 0, .current_bytes = 0}};
-
-    // Graph build progress counters
-    using GraphBuildProgress = struct {
-        uint64_t processed_links;  // number of edges inserted into adjacency list
-        uint64_t total_links;      // total number of edges to insert
-        uint32_t edges_speed;      // edges inserted per second
-    };
-    std::atomic<GraphBuildProgress> graph_build_progress{GraphBuildProgress{0, 0, 0}};
-
-    // BFS progress counters
-    using bfs_progress_counter = struct {
-        uint32_t current_layer;         // current layer of BFS
-        uint32_t layer_size;            // number of nodes in current layer
-        uint32_t layer_explored_count;  // number of nodes explored in current layer (for layer progress bar)
-        uint32_t total_explored_nodes;  // total number of nodes explored (for total progress bar)
-    };
-    std::atomic<bfs_progress_counter> bfs_progress{bfs_progress_counter{0, 0, 0, 0}};
-    std::atomic<bool> is_searching{false};
-
-    // Timing of the different stages of the program (for benchmarking)
-    std::chrono::milliseconds page_load_duration{0};
-    std::chrono::milliseconds linktarget_load_duration{0};
-    std::chrono::milliseconds link_load_duration{0};
-    std::chrono::milliseconds graph_build_duration{0};
-
-    // Current stage
     std::atomic<UIStage> stage{UIStage::WikiSelection};
+    uint64_t ram_budget = wg::kBudgetAuto;  ///< for the graphs opened (--ram-budget)
+    bool force_rebuild = false;             ///< --rebuild
 
-    // User input and results
-    std::string selected_wiki_prefix;
-    std::string selected_wiki_date;
-    DownloadedWiki selected_wiki;
+    WikiListState wikis;
+    SelectedWiki selected;
+    DownloadState download;
+    PrepareState prepare;
+    SearchState search;
 
-    // Access to loaders
-    PageLoader* page_loader{nullptr};
+    /// Esc during a download, build or the title input: the cancel flags are set and the UI returns to the wiki list
+    /// once nothing is running any more (see finish_going_back_if_idle).
+    bool going_back = false;
 
-    // User input
-    int selected_wiki_index{0};
-    std::string start_title;
-    std::string end_title;
+    wg::GraphStore* graph = nullptr;
+    std::stop_source app_stop;  ///< the UI is closing; never replaced
+    BackgroundThreads threads;
 
-    // UI display
-    std::string error_message;
-    std::vector<std::vector<uint32_t>> found_paths;
-    std::chrono::milliseconds search_duration{0};
+    /// The UI is closing: stop all background work (then join `threads`).
+    void stop_all() {
+        app_stop.request_stop();
+        download.stop.request_stop();
+        prepare.stop.request_stop();
+        search.stop.request_stop();
+    }
 
-    // Download progress pair
-    using DownloadProgress = struct {
-        uint64_t dlnow;
-        uint64_t dltotal;
-        uint64_t dlspeed;
-    };
-
-    // Download state
-    std::atomic<DownloadProgress> page_download_progress{DownloadProgress{0, 0, 0}};
-    std::atomic<bool> page_download_complete{false};
-    std::atomic<DownloadProgress> pagelinks_download_progress{DownloadProgress{0, 0, 0}};
-    std::atomic<bool> pagelinks_download_complete{false};
-    std::atomic<DownloadProgress> linktarget_download_progress{DownloadProgress{0, 0, 0}};
-    std::atomic<bool> linktarget_download_complete{false};
-    std::string download_error_message;
-
-    // Referesh rate
-    static constexpr std::chrono::milliseconds refresh_rate{200};
+    /// Redraw interval while something is in progress
+    static constexpr std::chrono::milliseconds kRefreshRate{200};
 };
 
-/// @brief Request a manual UI refresh by posting a custom event to the active screen.
-[[maybe_unused]] static void post_ui_refresh() {
-    auto* screen = ftxui::ScreenInteractive::Active();
-    if (screen != nullptr) {
+/// Request a redraw from any thread (dropped if the UI is not running).
+inline void post_ui_refresh() {
+    if (auto* screen = ftxui::ScreenInteractive::Active()) screen->PostEvent(ftxui::Event::Custom);
+}
+
+/// Run `task` on the UI thread, then redraw (dropped if the UI is not running).
+inline void post_to_ui(std::function<void()> task) {
+    if (auto* screen = ftxui::ScreenInteractive::Active()) {
+        screen->Post(std::move(task));
         screen->PostEvent(ftxui::Event::Custom);
     }
 }
+
+}  // namespace wg::app

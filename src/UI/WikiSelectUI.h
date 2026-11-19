@@ -1,72 +1,38 @@
 #pragma once
 
 #include <ftxui/component/component_base.hpp>
-#include <functional>
-#include <map>
 #include <string>
 #include <vector>
 
 #include "FetchWikiData/FetchWikiStats.h"
 #include "UI/UIBase.h"
 
-using ftxui::Component;
+namespace wg::app {
 
-// Forward declaration
-struct UIState;
-
-/// @brief Class to manage wiki selection UI state and data
-class WikiSelectUIManager {
-   private:
-    std::vector<std::string> wiki_names;
-    std::vector<WikiEntry> static_stats;
-    std::map<std::string, WikiEntry> stats_map;
-    std::vector<bool> is_downloaded;
-    std::vector<DownloadedWiki> downloaded_wikis;
-
-    /// @brief Scan the data directory for already downloaded Wikipedia files.
-    std::vector<DownloadedWiki> scan_downloaded_wikis();
-
+/// Rows of the wiki selection screen: downloaded wikis first, then every wiki listed by WikiStats.
+class WikiListRows {
    public:
-    /// @brief Initialize the UI manager with fresh data
-    void initialize(UIState& state, const std::vector<WikiEntry>& stats);
+    /// Rebuild the rows: rescans the data folder for downloaded wikis
+    void rebuild(const std::vector<WikiEntry>& stats, bool list_loading);
 
-    /// @brief Get the current wiki names
-    const std::vector<std::string>& get_wiki_names() const {
-        return wiki_names;
-    }
+    /// The row labels, for the menu that tracks the selection
+    [[nodiscard]] const std::vector<std::string>& names() const { return names_; }
+    [[nodiscard]] size_t size() const { return rows_.size(); }
+    [[nodiscard]] const WikiEntry& row(size_t index) const { return rows_[index]; }
+    /// Downloaded wikis are the first rows
+    [[nodiscard]] bool is_downloaded(size_t index) const { return index < downloaded_.size(); }
+    [[nodiscard]] const DownloadedWiki& downloaded(size_t index) const { return downloaded_[index]; }
 
-    /// @brief Get the current stats
-    const std::vector<WikiEntry>& get_static_stats() const {
-        return static_stats;
-    }
-
-    /// @brief Get the downloaded status
-    const std::vector<bool>& get_is_downloaded() const {
-        return is_downloaded;
-    }
-
-    /// @brief Get the downloaded wikis
-    const std::vector<DownloadedWiki>& get_downloaded_wikis() const {
-        return downloaded_wikis;
-    }
-
-    /// @brief Get a specific stat by index
-    [[nodiscard]] const WikiEntry& get_stat_at(size_t index) const {
-        return static_stats[index];
-    }
-
-    /// @brief Check if a wiki at index is downloaded
-    bool is_wiki_downloaded(size_t index) const {
-        return index < is_downloaded.size() && is_downloaded[index];
-    }
+   private:
+    std::vector<std::string> names_;
+    std::vector<WikiEntry> rows_;
+    std::vector<DownloadedWiki> downloaded_;
 };
 
 /**
- * @brief Build the wiki selection screen component.
- * @param state Shared UI state to update based on user actions
- * @param stats Mutable list of available wikis with stats
- * @param on_wiki_selected Optional callback invoked after a selection is made
- * @return ftxui Component for the selection UI
+ * Build the wiki selection screen component. Enter opens a downloaded wiki or downloads the selected one.
+ * @param state Shared UI state; the list of wikis is state.wikis
  */
-Component create_wiki_select_ui(UIState& state, std::vector<WikiEntry>& stats,
-                                std::function<void()> on_wiki_selected = nullptr);
+ftxui::Component create_wiki_select_ui(UIState& state);
+
+}  // namespace wg::app
