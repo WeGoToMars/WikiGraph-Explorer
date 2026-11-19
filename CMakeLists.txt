@@ -28,6 +28,26 @@ FetchContent_MakeAvailable(ftxui)
 # zlib streams the gzip-compressed dumps (the graph is built from them once, then cached)
 find_package(ZLIB REQUIRED)
 
+# rapidgzip decompresses the dumps on several threads, in memory. OFF: zlib on one thread (about 4 times slower)
+option(WIKIGRAPH_PARALLEL_GZIP "Decompress the dumps on several threads with rapidgzip" ON)
+if(WIKIGRAPH_PARALLEL_GZIP)
+  FetchContent_Declare(librapidarchive
+    GIT_REPOSITORY    "https://github.com/mxmlnkn/librapidarchive"
+    GIT_TAG           "rapidgzip-v0.16.2"
+    GIT_SUBMODULES    ""  # its bundled zlib, ISA-L and rpmalloc are not used
+    SYSTEM
+  )
+  set(LIBRAPIDARCHIVE_BUILD_TESTS OFF)
+  set(LIBRAPIDARCHIVE_BUILD_TOOLS OFF)
+  set(LIBRAPIDARCHIVE_USE_SYSTEM_ZLIB ON)
+  set(LIBRAPIDARCHIVE_WITH_ISAL OFF)  # assembly: needs NASM on x86_64, and is disabled on macOS anyway
+  set(LIBRAPIDARCHIVE_WITH_RPMALLOC OFF)
+  # It forces the macOS deployment target down to 13.0 in the cache; keep ours
+  set(WG_OSX_DEPLOYMENT_TARGET "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+  FetchContent_MakeAvailable(librapidarchive)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${WG_OSX_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
 # libcurl wrapper for downloading wikipedia dumps
 FetchContent_Declare(cpr
   GIT_REPOSITORY    "https://github.com/libcpr/cpr"
@@ -79,6 +99,12 @@ endif()
 add_library(wikigraph_core STATIC ${CORE_SOURCES})
 target_include_directories(wikigraph_core PUBLIC src)
 target_link_libraries(wikigraph_core PUBLIC ZLIB::ZLIB PRIVATE wikigraph_warnings)
+if(WIKIGRAPH_PARALLEL_GZIP)
+  target_link_libraries(wikigraph_core PRIVATE rapidgzip::rapidgzip)
+  target_compile_definitions(wikigraph_core PRIVATE WG_PARALLEL_GZIP)
+  # rapidgzip's lookup tables are computed at compile time
+  target_compile_options(wikigraph_core PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/bigobj;/constexpr:steps199000100>")
+endif()
 # std::atomic of the progress structs is not lock-free; GCC/Clang on Linux implement it in libatomic
 if(UNIX AND NOT APPLE)
   target_link_libraries(wikigraph_core PUBLIC atomic)

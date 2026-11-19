@@ -8,12 +8,57 @@
 
 #include <chrono>
 #include <cstddef>
+#include <iostream>
 #include <memory>
+#include <mutex>
 
 #include "Graph/Log.h"
 #include "Utils/PathUtils.h"
 
 namespace wg::app {
+
+// Collects what is written to it and logs each complete line. Several threads may write to std::cerr at once.
+class StderrToLog::LineBuffer : public std::streambuf {
+   public:
+    ~LineBuffer() override;
+
+   protected:
+    int_type overflow(int_type ch) override {
+        if (traits_type::eq_int_type(ch, traits_type::eof())) return traits_type::not_eof(ch);
+        const char c = traits_type::to_char_type(ch);
+        xsputn(&c, 1);
+        return ch;
+    }
+
+    std::streamsize xsputn(const char* s, std::streamsize n) override {
+        const std::lock_guard lk(mutex_);
+        for (const char c : std::string_view(s, static_cast<size_t>(n))) {
+            if (c == '\n') {
+                spdlog::warn("{}", line_);
+                line_.clear();
+            } else {
+                line_ += c;
+            }
+        }
+        return n;
+    }
+
+   private:
+    void flush_partial() {
+        const std::lock_guard lk(mutex_);
+        if (!line_.empty()) spdlog::warn("{}", line_);
+        line_.clear();
+    }
+
+    std::mutex mutex_;
+    std::string line_;
+};
+
+StderrToLog::LineBuffer::~LineBuffer() { flush_partial(); }
+
+StderrToLog::StderrToLog() : buffer_(std::make_unique<LineBuffer>()), previous_(std::cerr.rdbuf(buffer_.get())) {}
+
+StderrToLog::~StderrToLog() { std::cerr.rdbuf(previous_); }
 
 namespace {
 

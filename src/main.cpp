@@ -327,6 +327,7 @@ int main(int argc, char** argv) {
 
     // Blocks until the user quits; background work is stopped and joined before it returns
     try {
+        const wg::app::StderrToLog stderr_to_log;  // the UI owns the terminal
         wg::app::run_ui(state);
     } catch (const std::exception& e) {
         // The screen has been restored by now (App's destructor). Stop the background work before

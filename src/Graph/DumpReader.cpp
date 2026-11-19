@@ -2,7 +2,12 @@
 
 #include <zlib.h>
 
+#ifdef WG_PARALLEL_GZIP
+#include <rapidgzip/rapidgzip.hpp>
+#endif
+
 #include <algorithm>
+#include <memory>
 #include <chrono>
 #include <condition_variable>
 #include <deque>
@@ -48,14 +53,65 @@ void check_columns(const std::filesystem::path& path, std::initializer_list<std:
                                          columns.empty() ? "no CREATE TABLE statement" : string_utils::join(columns, ", ")));
 }
 
+namespace {
+
+/// A gzip file read as one stream of uncompressed bytes. read() returns 0 at the end of the stream and throws
+/// std::exception (with the reason) when the file is damaged or ends early; both versions check the CRC-32.
+#ifdef WG_PARALLEL_GZIP
+// rapidgzip decompresses chunks of the file on `threads` threads, ahead of what has been read
+class GzipInput {
+   public:
+    GzipInput(const std::filesystem::path& path, unsigned threads)
+        : reader_(std::make_unique<rapidgzip::StandardFileReader>(path.string()), threads, kChunkBytes) {}
+
+    size_t read(char* out, size_t n) { return reader_.read(out, n); }
+    /// Approximate (rapidgzip knows it to within a deflate block), which is enough for progress
+    [[nodiscard]] uint64_t compressed_offset() const { return reader_.tellCompressed(); }
+
+   private:
+    // 1 MiB of compressed data per chunk: as fast as rapidgzip's default of 4 MiB, with a third of the memory
+    static constexpr uint64_t kChunkBytes = uint64_t{1} << 20;
+    rapidgzip::ParallelGzipReader<> reader_;
+};
+#else
+// zlib on the calling thread
+class GzipInput {
+   public:
+    GzipInput(const std::filesystem::path& path, unsigned /*threads*/) : f_(gzopen(path.string().c_str(), "rb")) {
+        if (f_ == nullptr) throw std::runtime_error("cannot open " + path.string());
+        gzbuffer(f_, 4u << 20);
+    }
+    ~GzipInput() { gzclose(f_); }
+    GzipInput(const GzipInput&) = delete;
+    GzipInput& operator=(const GzipInput&) = delete;
+
+    size_t read(char* out, size_t n) {
+        const int r = gzread(f_, out, static_cast<unsigned>(n));
+        int errnum = Z_OK;
+        if (r < 0) throw std::runtime_error(gzerror(f_, &errnum));
+        if (r == 0) {
+            // gzread also returns 0, not -1, when the file ends in the middle of the gzip stream (a truncated
+            // download); only gzerror tells the two apart
+            const char* msg = gzerror(f_, &errnum);
+            if (errnum != Z_OK) throw std::runtime_error(errnum == Z_BUF_ERROR ? "unexpected end of file" : msg);
+        }
+        return static_cast<size_t>(r);
+    }
+    [[nodiscard]] uint64_t compressed_offset() const { return static_cast<uint64_t>(gzoffset(f_)); }
+
+   private:
+    gzFile f_;
+};
+#endif
+
+}  // namespace
+
 DumpStreamStats stream_dump(const std::filesystem::path& path, uint64_t stop_after, unsigned threads,
                             const std::function<void(DumpChunk&)>& on_chunk,
                             const std::function<void(uint64_t, uint64_t)>& on_progress, std::stop_token stop) {
     const auto t0 = std::chrono::steady_clock::now();
     const uint64_t compressed_size = std::filesystem::file_size(path);
-    gzFile f = gzopen(path.string().c_str(), "rb");
-    if (f == nullptr) throw std::runtime_error("cannot open " + path.string());
-    gzbuffer(f, 4u << 20);
+    GzipInput in(path, std::max(1u, threads));
 
     std::mutex m;
     std::condition_variable_any cv_items;  // also wakes the workers when the pool is destroyed early
@@ -105,13 +161,14 @@ DumpStreamStats stream_dump(const std::filesystem::path& path, uint64_t stop_aft
         DumpChunk c;
         c.data.resize(carry.size() + kChunk);
         std::ranges::copy(carry, c.data.begin());
-        const int r = gzread(f, c.data.data() + carry.size(), static_cast<unsigned>(kChunk));
-        if (r < 0) {
-            int errnum = 0;
-            read_error = gzerror(f, &errnum);
+        size_t r = 0;
+        try {
+            r = in.read(c.data.data() + carry.size(), kChunk);
+        } catch (const std::exception& e) {
+            read_error = e.what();
             break;
         }
-        const size_t have = carry.size() + static_cast<size_t>(r);
+        const size_t have = carry.size() + r;
         size_t cut = have;
         if (r > 0) {
             while (cut > 0 && c.data[cut - 1] != '\n') --cut;
@@ -128,21 +185,13 @@ DumpStreamStats stream_dump(const std::filesystem::path& path, uint64_t stop_aft
             queue.push_back(std::move(c));
             cv_items.notify_one();
         }
-        if (on_progress) on_progress(static_cast<uint64_t>(gzoffset(f)), compressed_size);
-        if (r == 0) {
-            // gzread also returns 0, not -1, when the file ends in the middle of the gzip stream (a truncated
-            // download); only gzerror tells the two apart
-            int errnum = Z_OK;
-            const char* msg = gzerror(f, &errnum);
-            if (errnum != Z_OK) read_error = errnum == Z_BUF_ERROR ? "unexpected end of file" : msg;
-            break;
-        }
+        if (on_progress) on_progress(std::min(in.compressed_offset(), compressed_size), compressed_size);
+        if (r == 0) break;
         if (stop_after != 0 && produced >= stop_after) {
             st.stopped_early = true;
             break;
         }
     }
-    gzclose(f);
     {
         std::lock_guard lk(m);
         done = true;

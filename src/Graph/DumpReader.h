@@ -30,11 +30,14 @@ struct DumpStreamStats {
 };
 
 /**
- * @brief Decompress a .sql.gz dump on one thread and hand ~8 MB chunks to worker threads.
+ * @brief Decompress a .sql.gz dump in memory and hand ~8 MB chunks of whole lines to worker threads.
+ *
+ * Built with WG_PARALLEL_GZIP (the CMake option WIKIGRAPH_PARALLEL_GZIP), rapidgzip decompresses on `threads`
+ * threads; otherwise zlib decompresses on the calling thread. Nothing is written to disk either way.
  *
  * @param path         the gzip file
  * @param stop_after   stop after this many uncompressed bytes (0 = read everything)
- * @param threads      worker threads (at least 1)
+ * @param threads      worker threads, and decompression threads with rapidgzip (at least 1)
  * @param on_chunk     called on worker threads, in any order
  * @param on_progress  called on the reading thread with (compressed bytes read, compressed file size)
  * @param stop         checked before each chunk; a stop request ends the reading (workers finish their chunk first)
