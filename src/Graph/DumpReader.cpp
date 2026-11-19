@@ -53,17 +53,17 @@ void check_columns(const std::filesystem::path& path, std::initializer_list<std:
                                          columns.empty() ? "no CREATE TABLE statement" : string_utils::join(columns, ", ")));
 }
 
-namespace {
-
 /// A gzip file read as one stream of uncompressed bytes. read() returns 0 at the end of the stream and throws
 /// std::exception (with the reason) when the file is damaged or ends early; both versions check the CRC-32.
 #ifdef WG_PARALLEL_GZIP
 // rapidgzip decompresses chunks of the file on `threads` threads, ahead of what has been read
-class GzipInput {
+class DumpFile::Input {
    public:
-    GzipInput(const std::filesystem::path& path, unsigned threads)
+    Input(const std::filesystem::path& path, unsigned threads)
         : reader_(std::make_unique<rapidgzip::StandardFileReader>(path.string()), threads, kChunkBytes) {}
 
+    /// Back to the start. After a complete read, the index built during it makes the next read faster.
+    void rewind() { reader_.seek(0); }
     size_t read(char* out, size_t n) { return reader_.read(out, n); }
     /// Approximate (rapidgzip knows it to within a deflate block), which is enough for progress
     [[nodiscard]] uint64_t compressed_offset() const { return reader_.tellCompressed(); }
@@ -75,16 +75,19 @@ class GzipInput {
 };
 #else
 // zlib on the calling thread
-class GzipInput {
+class DumpFile::Input {
    public:
-    GzipInput(const std::filesystem::path& path, unsigned /*threads*/) : f_(gzopen(path.string().c_str(), "rb")) {
+    Input(const std::filesystem::path& path, unsigned /*threads*/) : f_(gzopen(path.string().c_str(), "rb")) {
         if (f_ == nullptr) throw std::runtime_error("cannot open " + path.string());
         gzbuffer(f_, 4u << 20);
     }
-    ~GzipInput() { gzclose(f_); }
-    GzipInput(const GzipInput&) = delete;
-    GzipInput& operator=(const GzipInput&) = delete;
+    ~Input() { gzclose(f_); }
+    Input(const Input&) = delete;
+    Input& operator=(const Input&) = delete;
 
+    void rewind() {
+        if (gzrewind(f_) != 0) throw std::runtime_error("cannot go back to the start of the file");
+    }
     size_t read(char* out, size_t n) {
         const int r = gzread(f_, out, static_cast<unsigned>(n));
         int errnum = Z_OK;
@@ -104,14 +107,28 @@ class GzipInput {
 };
 #endif
 
-}  // namespace
+DumpFile::DumpFile(const std::filesystem::path& path, unsigned threads)
+    : path_(path), in_(std::make_unique<Input>(path, std::max(1u, threads))) {}
+
+DumpFile::~DumpFile() = default;
 
 DumpStreamStats stream_dump(const std::filesystem::path& path, uint64_t stop_after, unsigned threads,
                             const std::function<void(DumpChunk&)>& on_chunk,
                             const std::function<void(uint64_t, uint64_t)>& on_progress, std::stop_token stop) {
+    return DumpFile(path, threads).stream(stop_after, threads, on_chunk, on_progress, std::move(stop));
+}
+
+DumpStreamStats DumpFile::stream(uint64_t stop_after, unsigned threads, const std::function<void(DumpChunk&)>& on_chunk,
+                                 const std::function<void(uint64_t, uint64_t)>& on_progress, std::stop_token stop) {
     const auto t0 = std::chrono::steady_clock::now();
+    const std::filesystem::path& path = path_;
     const uint64_t compressed_size = std::filesystem::file_size(path);
-    GzipInput in(path, std::max(1u, threads));
+    Input& in = *in_;
+    try {
+        in.rewind();
+    } catch (const std::exception& e) {
+        throw std::runtime_error("cannot read " + path.string() + ": " + e.what());
+    }
 
     std::mutex m;
     std::condition_variable_any cv_items;  // also wakes the workers when the pool is destroyed early

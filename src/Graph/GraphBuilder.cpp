@@ -40,7 +40,7 @@
 //      number_articles                        -> Articles: dense numbers, each redirect folded into its article
 //   3. read_link_targets     linktarget dump  -> the article each lt_id names
 //   4. count_links           pagelinks dump   -> LinkCounts: degrees, and where the main-namespace rows end
-//   5. fill_links            pagelinks again  -> LinkLists in both directions
+//   5. fill_links            pagelinks again  -> LinkLists in both directions (read_links runs 4 and 5)
 //   6. dedup, order_nodes, then write_lists, write_nodes, write_titles, write_redirects, write_meta, write_hot_blocks
 // Each phase returns what the later ones need, and the tables are freed as soon as nothing needs them.
 
@@ -72,15 +72,21 @@ class Build {
 
     /// Stream a dump to `on_chunk`, reporting progress as `step`. A cancelled read throws, so a phase never goes on
     /// with half-filled tables.
-    DumpStreamStats stream(const std::filesystem::path& path, uint64_t stop_after, BuildStep step,
+    DumpStreamStats stream(DumpFile& file, uint64_t stop_after, BuildStep step,
                            const std::function<void(DumpChunk&)>& on_chunk) {
         rows_ = 0;
         auto report = [this, step](uint64_t done, uint64_t total) {
             if (progress_) progress_({step, done, total, rows_.load(std::memory_order_relaxed)});
         };
-        const DumpStreamStats stats = stream_dump(path, stop_after, workers, on_chunk, report, stop_);
+        const DumpStreamStats stats = file.stream(stop_after, workers, on_chunk, report, stop_);
         check_cancel();
         return stats;
+    }
+    /// Open a dump that is read once, and stream it.
+    DumpStreamStats stream(const std::filesystem::path& path, BuildStep step,
+                           const std::function<void(DumpChunk&)>& on_chunk) {
+        DumpFile file(path, workers);
+        return stream(file, 0, step, on_chunk);
     }
     /// Called from the chunk handlers: rows parsed, for the progress report.
     void count_rows(uint64_t n) { rows_ += n; }
@@ -235,7 +241,7 @@ PageTable read_pages(Build& build) {
         if (chunks.size() <= c.seq) chunks.resize(c.seq + 1);
         chunks[c.seq] = std::move(b);
     };
-    build.stream(build.dumps.page, 0, BuildStep::Pages, on_chunk);
+    build.stream(build.dumps.page, BuildStep::Pages, on_chunk);
     return merge_page_chunks(chunks, build.dumps.page);
 }
 
@@ -305,7 +311,7 @@ IdVector<PageRow, PageRow> read_redirect_targets(Build& build, const PageTable& 
         parse_redirect_chunk(c.text(), pages, by_title, target, rows);
         build.count_rows(rows);
     };
-    build.stream(build.dumps.redirect, 0, BuildStep::Redirects, on_chunk);
+    build.stream(build.dumps.redirect, BuildStep::Redirects, on_chunk);
     return target;
 }
 
@@ -383,7 +389,7 @@ IdVector<LinkTargetId, Article> read_link_targets(Build& build, const TitleHash&
         max_id = std::max(max_id, chunk_max);
         hits.push_back(std::move(h));
     };
-    build.stream(build.dumps.linktarget, 0, BuildStep::LinkTargets, on_chunk);
+    build.stream(build.dumps.linktarget, BuildStep::LinkTargets, on_chunk);
     IdVector<LinkTargetId, Article> article(size_t{max_id} + 1, kNoId<Article>);
     for (const auto& [id, a] : hits | std::views::join) article[id] = a;
     return article;
@@ -485,7 +491,7 @@ uint64_t count_chunk(const DumpChunk& c, const LinkEnds& ends, LinkCounts& count
 }
 
 /// Pass 1: degrees, and where the main-namespace rows end.
-LinkCounts count_links(Build& build, const LinkEnds& ends, size_t articles) {
+LinkCounts count_links(Build& build, DumpFile& pagelinks, const LinkEnds& ends, size_t articles) {
     LinkCounts counts;
     counts.out.assign(articles, 0);
     counts.in.assign(articles, 0);
@@ -502,11 +508,11 @@ LinkCounts count_links(Build& build, const LinkEnds& ends, size_t articles) {
         if (chunk_ns.size() <= c.seq) chunk_ns.resize(c.seq + 1);
         chunk_ns[c.seq] = ns;
     };
-    const auto stats = build.stream(build.dumps.pagelinks, 0, BuildStep::LinksCount, on_chunk);
+    const auto stats = build.stream(pagelinks, 0, BuildStep::LinksCount, on_chunk);
     counts.rows = build.rows();
     counts.links = links.load();
     if (counts.links == 0)
-        throw std::runtime_error("no links between main-namespace pages found in " + build.dumps.pagelinks.string());
+        throw std::runtime_error("no links between main-namespace pages found in " + pagelinks.path().string());
 
     // Stop pass 2 early only if pass 1 saw the namespace order hold over the whole file
     counts.ns_sorted = true;
@@ -546,7 +552,7 @@ std::vector<uint64_t> offsets_for(std::span<const uint32_t> degree) {
 }
 
 /// Pass 2: read the links again and put each in both directions' lists.
-PerDir<LinkLists> fill_links(Build& build, const LinkEnds& ends, LinkCounts counts) {
+PerDir<LinkLists> fill_links(Build& build, DumpFile& pagelinks, const LinkEnds& ends, LinkCounts counts) {
     PerDir<LinkLists> lists;
     lists[Dir::Fwd].offset = offsets_for(counts.out.values());
     lists[Dir::Rev].offset = offsets_for(counts.in.values());
@@ -575,9 +581,20 @@ PerDir<LinkLists> fill_links(Build& build, const LinkEnds& ends, LinkCounts coun
         build.count_rows(rows);
         filled += links;
     };
-    build.stream(build.dumps.pagelinks, counts.read_until, BuildStep::LinksFill, on_chunk);
+    const auto stats = build.stream(pagelinks, counts.read_until, BuildStep::LinksFill, on_chunk);
     if (filled.load() != counts.links) throw std::runtime_error("pagelinks changed between the two passes");
+    log_info("pagelinks pass 2: {:.1f} GB uncompressed in {:.1f} s",
+             static_cast<double>(stats.uncompressed_bytes) / kBytesPerGB, stats.seconds);
     return lists;
+}
+
+/// Passes 1 and 2. The dump is opened once for both: with rapidgzip, pass 2 reuses the index of the file that pass 1
+/// built. It is closed on return, with its index and decompression threads.
+PerDir<LinkLists> read_links(Build& build, const LinkEnds& ends, size_t articles, uint64_t& rows) {
+    DumpFile pagelinks(build.dumps.pagelinks, build.workers);
+    LinkCounts counts = count_links(build, pagelinks, ends, articles);
+    rows = counts.rows;
+    return fill_links(build, pagelinks, ends, std::move(counts));
 }
 
 // ------------------------------------------------------------------------------------------------ 6. finish
@@ -824,10 +841,8 @@ BuildReport build_graph_impl(const DumpFiles& dumps, const std::filesystem::path
     rep.redirects = articles.redirects;
     rep.redirects_unresolved = articles.unresolved;
 
-    LinkCounts counts = count_links(build, ends, articles.size());
-    rep.pagelinks_rows = counts.rows;
-    const uint64_t links_read = counts.links;
-    PerDir<LinkLists> links = fill_links(build, ends, std::move(counts));
+    PerDir<LinkLists> links = read_links(build, ends, articles.size(), rep.pagelinks_rows);
+    const uint64_t links_read = links[Dir::Fwd].target.size();  // before dedup
     ends = LinkEnds();
 
     build.finish_step(0);

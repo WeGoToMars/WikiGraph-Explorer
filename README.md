@@ -27,17 +27,17 @@ This app features a detailed TUI, made with [FTXUI](https://github.com/ArthurSon
 
   | Wikipedia | Date | Dumps | Graph cache | Build time / peak RAM | Search RAM (default) | Mean search |
   |---|---|---|---|---|---|---|
-  | [English](https://en.wikipedia.org/wiki/Main_Page) | 2026-11-01 | **10 GB** | 3.1 GB | 64 s / 10.2 GB | **3.2 GB** | 1.1 ms |
-  | [Simple English](https://simple.wikipedia.org/wiki/Main_Page) | 2026-11-01 | 150 MB | 50 MB | 1.1 s / 0.24 GB | 0.06 GB | 0.09 ms |
+  | [English](https://en.wikipedia.org/wiki/Main_Page) | 2026-11-01 | **10 GB** | 3.1 GB | 59 s / 9.9 GB | **3.2 GB** | 1.2 ms |
+  | [Simple English](https://simple.wikipedia.org/wiki/Main_Page) | 2026-11-01 | 150 MB | 50 MB | 0.8 s / 0.77 GB | 0.06 GB | 0.09 ms |
 
   English Wikipedia is 7.26 M articles and 716 M links. With a smaller `--ram-budget` it still answers from the SSD:
 
   | `--ram-budget` | Process RAM | Blocks read from SSD per search | Mean search | p95 |
   |---|---|---|---|---|
-  | `all` | 3.27 GB | 0 | 1.11 ms | 4.2 ms |
-  | `2.0` | 2.14 GB | 57 | 1.45 ms | 4.9 ms |
-  | `1.0` | 1.18 GB | 189 | 1.70 ms | 5.8 ms |
-  | `0.6` | 0.79 GB | 295 | 1.90 ms | 6.5 ms |
+  | `all` | 3.26 GB | 0 | 1.23 ms | 5.0 ms |
+  | `2.0` | 2.13 GB | 60 | 1.65 ms | 5.8 ms |
+  | `1.0` | 1.16 GB | 200 | 1.88 ms | 6.5 ms |
+  | `0.6` | 0.78 GB | 314 | 2.06 ms | 7.3 ms |
 
 </details>
 

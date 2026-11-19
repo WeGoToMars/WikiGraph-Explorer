@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <memory>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -30,18 +31,42 @@ struct DumpStreamStats {
 };
 
 /**
- * @brief Decompress a .sql.gz dump in memory and hand ~8 MB chunks of whole lines to worker threads.
+ * @brief A .sql.gz dump opened for reading, possibly several times.
  *
- * Built with WG_PARALLEL_GZIP (the CMake option WIKIGRAPH_PARALLEL_GZIP), rapidgzip decompresses on `threads`
- * threads; otherwise zlib decompresses on the calling thread. Nothing is written to disk either way.
- *
- * @param path         the gzip file
- * @param stop_after   stop after this many uncompressed bytes (0 = read everything)
- * @param threads      worker threads, and decompression threads with rapidgzip (at least 1)
- * @param on_chunk     called on worker threads, in any order
- * @param on_progress  called on the reading thread with (compressed bytes read, compressed file size)
- * @param stop         checked before each chunk; a stop request ends the reading (workers finish their chunk first)
+ * Built with WG_PARALLEL_GZIP (the CMake option WIKIGRAPH_PARALLEL_GZIP), rapidgzip decompresses it on `threads`
+ * threads and keeps an index of the deflate blocks it found: a later read starts every chunk at a known place with
+ * a known window, and is about twice as fast. Otherwise zlib decompresses it on the reading thread. Nothing is
+ * written to disk either way.
  */
+class DumpFile {
+   public:
+    DumpFile(const std::filesystem::path& path, unsigned threads);
+    ~DumpFile();
+    DumpFile(const DumpFile&) = delete;
+    DumpFile& operator=(const DumpFile&) = delete;
+
+    [[nodiscard]] const std::filesystem::path& path() const { return path_; }
+
+    /**
+     * @brief Decompress the dump from its start, in memory, and hand ~8 MB chunks of whole lines to worker threads.
+     *
+     * @param stop_after   stop after this many uncompressed bytes (0 = read everything)
+     * @param threads      worker threads (at least 1)
+     * @param on_chunk     called on worker threads, in any order
+     * @param on_progress  called on the reading thread with (compressed bytes read, compressed file size)
+     * @param stop         checked before each chunk; a stop request ends the reading (workers finish their chunk
+     *                     first)
+     */
+    DumpStreamStats stream(uint64_t stop_after, unsigned threads, const std::function<void(DumpChunk&)>& on_chunk,
+                           const std::function<void(uint64_t, uint64_t)>& on_progress, std::stop_token stop = {});
+
+   private:
+    class Input;
+    std::filesystem::path path_;
+    std::unique_ptr<Input> in_;
+};
+
+/// Open `path`, with `threads` decompression threads, and read it once (DumpFile::stream).
 DumpStreamStats stream_dump(const std::filesystem::path& path, uint64_t stop_after, unsigned threads,
                             const std::function<void(DumpChunk&)>& on_chunk,
                             const std::function<void(uint64_t, uint64_t)>& on_progress, std::stop_token stop = {});
