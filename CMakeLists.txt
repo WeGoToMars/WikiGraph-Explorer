@@ -16,8 +16,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Terminal UI Library
+# The target CPU: x86_64 or arm64. Under MSVC, the compiler's: in a Developer PowerShell set up to build for ARM64 on
+# an x64 machine, CMAKE_SYSTEM_PROCESSOR is the build machine's.
+if(MSVC)
+  string(TOLOWER "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" WG_ARCH)
+else()
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" WG_ARCH)
+endif()
+string(REGEX REPLACE "^(amd64|x64)$" "x86_64" WG_ARCH "${WG_ARCH}")
+string(REGEX REPLACE "^aarch64$" "arm64" WG_ARCH "${WG_ARCH}")
+
 include(FetchContent)
+
+# Terminal UI Library
 FetchContent_Declare(ftxui
   GIT_REPOSITORY    "https://github.com/ArthurSonzogni/ftxui"
   GIT_TAG           "v7.0.3"
@@ -31,21 +42,28 @@ find_package(ZLIB REQUIRED)
 # rapidgzip decompresses the dumps on several threads, in memory. OFF: zlib on one thread (about 4 times slower)
 option(WIKIGRAPH_PARALLEL_GZIP "Decompress the dumps on several threads with rapidgzip" ON)
 if(WIKIGRAPH_PARALLEL_GZIP)
+  include(cmake/Isal.cmake)
+  if(WIKIGRAPH_ISAL)
+    set(WG_RAPIDGZIP_SUBMODULES "src/external/isa-l")
+  endif()
   FetchContent_Declare(librapidarchive
     GIT_REPOSITORY    "https://github.com/mxmlnkn/librapidarchive"
     GIT_TAG           "rapidgzip-v0.16.2"
-    GIT_SUBMODULES    ""  # its bundled zlib, ISA-L and rpmalloc are not used
+    GIT_SUBMODULES    "${WG_RAPIDGZIP_SUBMODULES}"  # ISA-L's, if used: its bundled zlib and rpmalloc are not
     SYSTEM
   )
   set(LIBRAPIDARCHIVE_BUILD_TESTS OFF)
   set(LIBRAPIDARCHIVE_BUILD_TOOLS OFF)
   set(LIBRAPIDARCHIVE_USE_SYSTEM_ZLIB ON)
-  set(LIBRAPIDARCHIVE_WITH_ISAL OFF)  # assembly: needs NASM on x86_64, and is disabled on macOS anyway
+  set(LIBRAPIDARCHIVE_WITH_ISAL ${WIKIGRAPH_ISAL})
   set(LIBRAPIDARCHIVE_WITH_RPMALLOC OFF)
   # It forces the macOS deployment target down to 13.0 in the cache; keep ours
   set(WG_OSX_DEPLOYMENT_TARGET "${CMAKE_OSX_DEPLOYMENT_TARGET}")
   FetchContent_MakeAvailable(librapidarchive)
   set(CMAKE_OSX_DEPLOYMENT_TARGET "${WG_OSX_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+  if(TARGET isal)  # its C files get rapidgzip's long list of warnings
+    target_compile_options(isal PRIVATE "$<$<AND:$<COMPILE_LANGUAGE:C>,$<NOT:$<C_COMPILER_ID:MSVC>>>:-w>")
+  endif()
 endif()
 
 # libcurl wrapper for downloading wikipedia dumps
