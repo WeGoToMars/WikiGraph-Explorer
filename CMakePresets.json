@@ -13,7 +13,6 @@
         "CMAKE_EXE_LINKER_FLAGS_DEBUG": "-fsanitize=address,undefined",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "environment": {
@@ -34,7 +33,6 @@
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "generator": "Unix Makefiles"
@@ -50,7 +48,6 @@
         "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "generator": "Unix Makefiles"
@@ -67,7 +64,6 @@
         "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "-fsanitize=thread",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "environment": {

@@ -95,6 +95,15 @@ This project is using [CMake](https://cmake.org/) (3.28 or later), and features 
 
 On x86-64 Linux, install [NASM](https://www.nasm.us/) too. With it, rapidgzip uses ISA-L, which decompresses about 2.5 times faster where rapidgzip already knows where the compressed blocks start (the second read of the links table). Without NASM, it builds without ISA-L.
 
+### A static Linux executable
+To build one executable that runs on any Linux distribution, with libc (musl), curl and OpenSSL linked in, build in an Alpine container:
+
+```
+docker run --rm -e HOST_UID="$(id -u):$(id -g)" -v "$PWD":/src -w /src alpine:3.24 tools/ci/build-static-linux.sh
+```
+
+The result is `build/release/wikigraph`. It replaces musl's slow memory allocator with mimalloc, and its `memcpy`, `memchr` and `memcmp`, which are portable C there, with FreeBSD's x86-64 assembly (`third_party/freebsd-libc`) or, on arm64, vector versions (`src/Static/StringFunctions.c`). It finds the system's CA certificates at the usual locations of the common distributions, or at `$SSL_CERT_FILE`.
+
 For clangd and clang-tidy, link the compile commands of the preset you use into the project root (the link is ignored by git): `ln -s build/debug/compile_commands.json .`. The naming convention is checked by `.clang-tidy`: `clang-tidy -p build/debug src/main.cpp`.
 
 ### Windows

@@ -47,7 +47,7 @@ DownloadResult download_file(const std::string& url, const fs::path& path,
     std::ofstream file;
     auto last_report = std::chrono::steady_clock::now();
     uint64_t last_now = 0;
-    const cpr::Response r = cpr::Get(
+    const cpr::Response r = wiki_http::get(
         cpr::Url{url}, headers, wiki_http::user_agent(), cpr::ConnectTimeout{wiki_http::kConnectTimeout},
         cpr::LowSpeed{1, wiki_http::kStallTimeout},
         // Status lines look like "HTTP/1.1 206 Partial Content" or "HTTP/2 200"
@@ -113,8 +113,9 @@ std::expected<std::string, std::string> find_latest_dump(const std::string& db, 
     for (const char* table : {"page", "pagelinks", "linktarget", "redirect"}) {
         const std::string rss =
             std::format("https://dumps.wikimedia.org/{}wiki/latest/{}wiki-latest-{}.sql.gz-rss.xml", db, db, table);
-        const cpr::Response r = cpr::Get(cpr::Url{rss}, wiki_http::user_agent(),
-                                         cpr::Timeout{wiki_http::kRequestTimeout}, wiki_http::cancel_callback(stop));
+        const cpr::Response r = wiki_http::get(cpr::Url{rss}, wiki_http::user_agent(),
+                                               cpr::Timeout{wiki_http::kRequestTimeout},
+                                               wiki_http::cancel_callback(stop));
         // The feed's <link> is the dump directory: https://dumps.wikimedia.org/<db>wiki/<date>
         std::smatch m;
         if (r.status_code != 200 || !std::regex_search(r.text, m, std::regex(R"(<link>[^<]*/(\d{8})/?</link>)"))) {

@@ -116,8 +116,9 @@ std::vector<WikiEntry> fetch_wiki_stats(std::stop_token stop) {
     std::vector<WikiEntry> wiki_stats;
 
     const cpr::Response r =
-        cpr::Get(cpr::Url{"https://wikistats.wmcloud.org/api.php?action=dump&table=wikipedias&format=csv"},
-                 wiki_http::user_agent(), cpr::Timeout{wiki_http::kRequestTimeout}, wiki_http::cancel_callback(std::move(stop)));
+        wiki_http::get(cpr::Url{"https://wikistats.wmcloud.org/api.php?action=dump&table=wikipedias&format=csv"},
+                       wiki_http::user_agent(), cpr::Timeout{wiki_http::kRequestTimeout},
+                       wiki_http::cancel_callback(std::move(stop)));
     if (r.error || r.status_code != 200) {
         spdlog::warn("Could not fetch wiki statistics (HTTP {} {}); continuing offline", r.status_code, r.error.message);
         return wiki_stats;

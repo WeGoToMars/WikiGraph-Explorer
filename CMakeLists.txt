@@ -26,7 +26,15 @@ endif()
 string(REGEX REPLACE "^(amd64|x64)$" "x86_64" WG_ARCH "${WG_ARCH}")
 string(REGEX REPLACE "^aarch64$" "arm64" WG_ARCH "${WG_ARCH}")
 
+# The dependencies are linked into the executable (cpr would otherwise build shared libraries along with its curl)
+option(BUILD_SHARED_LIBS "Build the dependencies as shared libraries" OFF)
+option(WIKIGRAPH_STATIC "One static executable for every Linux distribution (cmake/StaticLinux.cmake)" OFF)
+
 include(FetchContent)
+
+if(WIKIGRAPH_STATIC)
+  include(cmake/StaticLinux.cmake)
+endif()
 
 # Terminal UI Library
 FetchContent_Declare(ftxui
@@ -72,8 +80,10 @@ FetchContent_Declare(cpr
   GIT_TAG           "1.15.1"
   SYSTEM
 )
-# Use the system's libcurl: building curl needs libpsl, which needs meson. Must be set before cpr is configured.
-set(CPR_USE_SYSTEM_CURL ON)
+# The system's libcurl (building curl with libpsl needs meson), unless set otherwise, as the static build does
+if(NOT DEFINED CPR_USE_SYSTEM_CURL)
+  set(CPR_USE_SYSTEM_CURL ON)
+endif()
 FetchContent_MakeAvailable(cpr)
 
 # Logging library
@@ -133,6 +143,7 @@ target_link_libraries(wikigraph_fetch PUBLIC wikigraph_core cpr::cpr spdlog::spd
 
 add_executable(wikigraph ${APP_SOURCES})
 target_link_libraries(wikigraph PRIVATE wikigraph_fetch ftxui::component wikigraph_warnings)  # fetch brings the core
+target_sources(wikigraph PRIVATE ${WG_STATIC_SOURCES})  # from cmake/StaticLinux.cmake
 
 # Unit and integration tests of the core (tests/). Off by default; the CI enables it.
 option(WIKIGRAPH_TESTS "Build the tests (fetches Catch2)" OFF)

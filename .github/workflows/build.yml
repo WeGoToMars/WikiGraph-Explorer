@@ -32,11 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install zlib and libcurl (Linux)
+      # One static executable for every distribution: musl, curl and OpenSSL linked in, built in Alpine. A plain
+      # docker run rather than a job container, because JavaScript actions cannot run in Alpine on arm64 runners.
+      - name: Build (Linux, static)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zlib1g-dev libcurl4-openssl-dev
+          docker run --rm -e HOST_UID="$(id -u):$(id -g)" -v "$PWD":/src -w /src alpine:3.24 \
+            tools/ci/build-static-linux.sh
+          file build/release/wikigraph | tee /dev/stderr | grep -qE "static(-pie)? linked"
 
       # The vcpkg presets use Ninja, which needs the compiler environment of a Developer Command Prompt
       - name: Set up MSVC (Windows)
@@ -61,9 +64,11 @@ jobs:
           key: vcpkg-${{ matrix.triplet }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Configure
+        if: runner.os != 'Linux'
         run: cmake --preset ${{ matrix.preset }} ${{ matrix.triplet && format('-DVCPKG_TARGET_TRIPLET={0}', matrix.triplet) || '' }}
 
       - name: Build
+        if: runner.os != 'Linux'
         run: cmake --build build/${{ matrix.preset }} --parallel
 
       # Builds a 6-article wiki and checks the answer, from RAM and from disk (a tiny RAM budget)
