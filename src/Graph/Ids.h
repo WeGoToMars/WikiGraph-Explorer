@@ -52,9 +52,12 @@ class IdVector {
     void release() { std::vector<T>().swap(v_); }
 
     /// Every id, in order.
+    ///
+    /// The iota counts in size_t, not uint32_t: MSVC 19.52 and 19.53 at /O2 on x64 miscompile a loop over a 32-bit
+    /// iota piped through a transform, and the first iteration reads far past the data. 19.51 is correct.
     [[nodiscard]] auto ids() const {
-        return std::views::iota(uint32_t{0}, static_cast<uint32_t>(v_.size())) |
-               std::views::transform([](uint32_t i) { return static_cast<Id>(i); });
+        return std::views::iota(size_t{0}, v_.size()) |
+               std::views::transform([](size_t i) { return static_cast<Id>(i); });
     }
     /// The values without their ids, e.g. to write them to a file.
     [[nodiscard]] std::span<T> values() { return v_; }

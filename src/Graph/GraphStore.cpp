@@ -217,7 +217,9 @@ void GraphStore::export_csr(Dir d, std::span<uint32_t> offsets, std::span<uint32
 
 std::vector<std::pair<uint32_t, uint32_t>> GraphStore::random_pairs(size_t count, uint64_t seed) const {
     const NeighbourLists& lists = impl().lists;
-    const auto candidates = std::views::iota(0u, static_cast<uint32_t>(lists.degrees(Dir::Fwd).size())) |
+    // size_t, not uint32_t: see IdVector::ids()
+    const auto candidates = std::views::iota(size_t{0}, lists.degrees(Dir::Fwd).size()) |
+                            std::views::transform([](size_t u) { return static_cast<uint32_t>(u); }) |
                             std::views::filter([&](uint32_t u) {
                                 return lists.degree(Dir::Fwd, u) != 0 && lists.degree(Dir::Rev, u) != 0;
                             }) |

@@ -638,8 +638,9 @@ struct NodeOrder {
 NodeOrder order_nodes(const PerDir<LinkLists>& links) {
     const size_t n = links[Dir::Fwd].size();
     auto degree = [&](Article u) { return links[Dir::Fwd].degree(u) + links[Dir::Rev].degree(u); };
-    auto by_degree = std::views::iota(uint32_t{0}, static_cast<uint32_t>(n)) |
-                     std::views::transform([](uint32_t u) { return static_cast<Article>(u); }) |
+    // size_t, not uint32_t: see IdVector::ids()
+    auto by_degree = std::views::iota(size_t{0}, n) |
+                     std::views::transform([](size_t u) { return static_cast<Article>(u); }) |
                      std::ranges::to<std::vector>();
     std::ranges::sort(by_degree,
                       [&](Article a, Article b) { return degree(a) != degree(b) ? degree(a) > degree(b) : a < b; });
