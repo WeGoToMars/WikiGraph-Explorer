@@ -1,0 +1,5 @@
+Earth -> Banana: 2 clicks, 4 shortest paths, 2 lists, 0 blocks from disk
+  Earth -> Ecuador -> Banana
+  Earth -> Guns, Germs and Steel -> Banana
+  Earth -> Tropical rainforest -> Banana
+  Earth -> Potassium -> Banana

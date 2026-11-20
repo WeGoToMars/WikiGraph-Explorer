@@ -5,7 +5,7 @@ UseTab: Never
 ColumnLimit: 120
 DerivePointerAlignment: false
 PointerAlignment: Left
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: All
 BreakBeforeBraces: Attach
 NamespaceIndentation: None
 IncludeBlocks: Regroup
@@ -13,3 +13,5 @@ SortIncludes: true
 ReflowComments: true
 Cpp11BracedListStyle: true
 SpaceBeforeParens: ControlStatements
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: true

@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.28)
 
+# Minimum macOS version: 13.3 for std::to_chars. Must be set before project(); applies to the dependencies too.
+# A lower value (cached by older build trees, or set on the command line) is raised to 13.3.
+if(NOT CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS 13.3)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "13.3" CACHE STRING "Minimum macOS version" FORCE)
+endif()
+
 project(wikigraph)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -10,162 +16,151 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Set minimum macOS version to 13.3 for std::to_chars support
-if(APPLE)
-  add_compile_options(-mmacosx-version-min=13.3)
-  add_link_options(-mmacosx-version-min=13.3)
+# The target CPU: x86_64 or arm64. Under MSVC, the compiler's: in a Developer PowerShell set up to build for ARM64 on
+# an x64 machine, CMAKE_SYSTEM_PROCESSOR is the build machine's.
+if(MSVC)
+  string(TOLOWER "${CMAKE_CXX_COMPILER_ARCHITECTURE_ID}" WG_ARCH)
+else()
+  string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" WG_ARCH)
+endif()
+string(REGEX REPLACE "^(amd64|x64)$" "x86_64" WG_ARCH "${WG_ARCH}")
+string(REGEX REPLACE "^aarch64$" "arm64" WG_ARCH "${WG_ARCH}")
+
+# MSVC reads source files in the system's code page unless told otherwise; they are UTF-8
+add_compile_options("$<$<COMPILE_LANG_AND_ID:C,MSVC>:/utf-8>" "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/utf-8>")
+
+# The dependencies are linked into the executable (cpr would otherwise build shared libraries along with its curl)
+option(BUILD_SHARED_LIBS "Build the dependencies as shared libraries" OFF)
+option(WIKIGRAPH_STATIC "One static executable for every Linux distribution (cmake/StaticLinux.cmake)" OFF)
+
+# FetchContent clones the dependencies with Git, which Visual Studio installs but leaves off the PATH of its
+# Developer PowerShell
+if(CMAKE_HOST_WIN32 AND DEFINED ENV{VSINSTALLDIR})
+  find_program(GIT_EXECUTABLE git
+    PATHS "$ENV{VSINSTALLDIR}Common7/IDE/CommonExtensions/Microsoft/TeamFoundation/Team Explorer/Git/cmd")
+endif()
+include(FetchContent)
+
+if(WIKIGRAPH_STATIC)
+  include(cmake/StaticLinux.cmake)
 endif()
 
-# Optional custom hashmap intergration
-option(USE_STD_UNORDERED_MAP "Use std::unordered_map instead of emhash")
-set(USE_STD_UNORDERED_MAP OFF CACHE BOOL "Use std::unordered_map instead of emhash" FORCE)
-# Use this approach to avoid rebuilding the whole project, only the files that include Hashmap.h will be recompiled
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/Utils/Hashmap.h.in ${CMAKE_CURRENT_SOURCE_DIR}/src/Utils/Hashmap.h)
-
-# Parallel decompression and loading of wikipedia dumps
-option(PARALLEL_DECOMPRESSION "Use parallel decompression of wikipedia dumps" OFF)
-set(PARALLEL_DECOMPRESSION OFF CACHE BOOL "Use parallel decompression of wikipedia dumps" FORCE)
-
 # Terminal UI Library
-include(FetchContent)
 FetchContent_Declare(ftxui
   GIT_REPOSITORY    "https://github.com/ArthurSonzogni/ftxui"
-  GIT_TAG v6.1.9
+  GIT_TAG           "v7.0.3"
+  SYSTEM
 )
 FetchContent_MakeAvailable(ftxui)
 
-# Optional rapidgzip integration
-if(PARALLEL_DECOMPRESSION)
-  # Configure ISA-L to build as static library
-  set(ISAL_BUILD_SHARED_LIBS OFF CACHE BOOL "Build ISA-L as shared library" FORCE)
-  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared libraries" FORCE)
-  
-  FetchContent_Declare(rapidgzip
-    GIT_REPOSITORY    "https://github.com/mxmlnkn/rapidgzip"
-    GIT_TAG           "5b1384efd9e32155bd9ae2bf08d3cc50d9709caf" # pin the commit to avoid breaking changes
-  )
-  
-  # Configure rapidgzip
-  set(LIBRAPIDARCHIVE_BUILD_TESTS OFF CACHE BOOL "Disable tests" FORCE)
-  set(LIBRAPIDARCHIVE_BUILD_TOOLS OFF CACHE BOOL "Disable tools" FORCE)
-  set(LIBRAPIDARCHIVE_WITH_RPMALLOC ON CACHE BOOL "Enable rpmalloc by default" FORCE)
-  set(LIBRAPIDARCHIVE_WITH_ISAL ON CACHE BOOL "Enable isal by default" FORCE)
-  
-  FetchContent_MakeAvailable(rapidgzip)
-  # rapidgzip uses constexpr to precompute LUTs, so we need to increase the limit
-  if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    add_compile_options(-fconstexpr-steps=20000000)
-  elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-    add_compile_options(/constexpr:steps 20000000)
+# zlib streams the gzip-compressed dumps (the graph is built from them once, then cached)
+find_package(ZLIB REQUIRED)
+
+# rapidgzip decompresses the dumps on several threads, in memory. OFF: zlib on one thread (about 4 times slower)
+option(WIKIGRAPH_PARALLEL_GZIP "Decompress the dumps on several threads with rapidgzip" ON)
+if(WIKIGRAPH_PARALLEL_GZIP)
+  include(cmake/Isal.cmake)
+  if(WIKIGRAPH_ISAL)
+    set(WG_RAPIDGZIP_SUBMODULES "src/external/isa-l")
   endif()
-
-  message(STATUS "Using rapidgzip for parallel decompression")
-
-  # High-performance concurrent queue for thread coordination
-  FetchContent_Declare(concurrentqueue
-  GIT_REPOSITORY    "https://github.com/cameron314/concurrentqueue"
-  GIT_TAG           "v1.0.4"
+  FetchContent_Declare(librapidarchive
+    GIT_REPOSITORY    "https://github.com/mxmlnkn/librapidarchive"
+    GIT_TAG           "rapidgzip-v0.16.2"
+    GIT_SUBMODULES    "${WG_RAPIDGZIP_SUBMODULES}"  # ISA-L's, if used: its bundled zlib and rpmalloc are not
+    SYSTEM
   )
-  FetchContent_MakeAvailable(concurrentqueue)
-else()
-  # Require zlib >= 1.2.9 for gzoffset
-  find_package(ZLIB 1.2.9 REQUIRED)
-  message(STATUS "Using system zlib")
+  set(LIBRAPIDARCHIVE_BUILD_TESTS OFF)
+  set(LIBRAPIDARCHIVE_BUILD_TOOLS OFF)
+  set(LIBRAPIDARCHIVE_USE_SYSTEM_ZLIB ON)
+  set(LIBRAPIDARCHIVE_WITH_ISAL ${WIKIGRAPH_ISAL})
+  set(LIBRAPIDARCHIVE_WITH_RPMALLOC OFF)
+  # It forces the macOS deployment target down to 13.0 in the cache; keep ours
+  set(WG_OSX_DEPLOYMENT_TARGET "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+  FetchContent_MakeAvailable(librapidarchive)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "${WG_OSX_DEPLOYMENT_TARGET}" CACHE STRING "Minimum macOS version" FORCE)
+  if(TARGET isal)  # its C files get rapidgzip's long list of warnings
+    target_compile_options(isal PRIVATE "$<$<AND:$<COMPILE_LANGUAGE:C>,$<NOT:$<C_COMPILER_ID:MSVC>>>:-w>")
+  endif()
 endif()
 
 # libcurl wrapper for downloading wikipedia dumps
 FetchContent_Declare(cpr
   GIT_REPOSITORY    "https://github.com/libcpr/cpr"
-  GIT_TAG           "1.12.0"
+  GIT_TAG           "1.15.1"
+  SYSTEM
 )
-FetchContent_MakeAvailable(cpr)
-set(CPR_FORCE_USE_SYSTEM_CURL ON) # To build curl libpsl is required, which requires mason to be installed
-
-if(NOT USE_STD_UNORDERED_MAP)
-  # A faster hashmap implementation than std::unordered_map for faster loading
-  FetchContent_Declare(emhash
-    GIT_REPOSITORY    "https://github.com/ktprime/emhash"
-    GIT_TAG           "master"
-    SOURCE_SUBDIR     "HEADER ONLY" # https://discourse.cmake.org/t/prevent-fetchcontent-makeavailable-to-execute-cmakelists-txt/12704/3
-  )
-  FetchContent_MakeAvailable(emhash)
-  message(STATUS "emhash_SOURCE_DIR: ${emhash_SOURCE_DIR}")
+# The system's libcurl (building curl with libpsl needs meson), unless set otherwise, as the static build does
+if(NOT DEFINED CPR_USE_SYSTEM_CURL)
+  set(CPR_USE_SYSTEM_CURL ON)
 endif()
+FetchContent_MakeAvailable(cpr)
 
 # Logging library
 FetchContent_Declare(spdlog
   GIT_REPOSITORY    "https://github.com/gabime/spdlog"
-  GIT_TAG           "v1.15.3"
+  GIT_TAG           "v1.17.0"
+  SYSTEM
 )
 FetchContent_MakeAvailable(spdlog)
 
-# Add all sources to the project
-file(GLOB_RECURSE SOURCES src/*.cpp)
-add_executable(wikigraph ${SOURCES})
+# Three targets, so the layering is enforced by the build: the core cannot include FTXUI or cpr headers.
+#   wikigraph_core   dump reader, graph builder and store, search, paths (zlib only; logs through wg::log)
+#   wikigraph_fetch  WikiStats list, dump lookup, downloads and checksums (cpr)
+#   wikigraph        terminal UI and command line (FTXUI), spdlog log file
+file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS src/Graph/*.cpp src/Utils/*.cpp)
+file(GLOB_RECURSE FETCH_SOURCES CONFIGURE_DEPENDS src/FetchWikiData/*.cpp)
+file(GLOB_RECURSE APP_SOURCES CONFIGURE_DEPENDS src/UI/*.cpp src/Log/*.cpp src/main.cpp)
 
-target_include_directories(wikigraph PRIVATE src)
-
-# Mark dependencies as system to avoid compiler warnings
-target_include_directories(wikigraph SYSTEM PRIVATE ${ftxui_SOURCE_DIR}/include)
-target_include_directories(wikigraph SYSTEM PRIVATE ${cpr_SOURCE_DIR}/include)
-target_include_directories(wikigraph SYSTEM PRIVATE ${spdlog_SOURCE_DIR}/include)
-
-if(PARALLEL_DECOMPRESSION)
-  target_include_directories(wikigraph SYSTEM PRIVATE ${rapidgzip_SOURCE_DIR}/src)
-  target_include_directories(wikigraph SYSTEM PRIVATE ${concurrentqueue_SOURCE_DIR})
-endif()
-
-if(NOT USE_STD_UNORDERED_MAP)
-  target_include_directories(wikigraph SYSTEM PRIVATE ${emhash_SOURCE_DIR})
-endif()
-
-# Link rapidgzip if enabled
-if(PARALLEL_DECOMPRESSION)
-  target_link_libraries(wikigraph PRIVATE librapidgzip)
-else()
-  target_link_libraries(wikigraph PRIVATE ZLIB::ZLIB)
-endif()
-
-target_link_libraries(wikigraph PRIVATE
-    ftxui::component
-    ftxui::screen
-    cpr::cpr
-    spdlog::spdlog
-)
-
-if(USE_STD_UNORDERED_MAP)
-  message(STATUS "Using std::unordered_map instead of emhash")
-  target_compile_definitions(wikigraph PRIVATE USE_STD_UNORDERED_MAP)
-else()
-  message(STATUS "Using emhash instead of std::unordered_map")
-endif()
-
-if(PARALLEL_DECOMPRESSION)
-  message(STATUS "Using rapidgzip for decompression")
-  target_compile_definitions(wikigraph PRIVATE PARALLEL_DECOMPRESSION)
-else()
-  message(STATUS "Using standard zlib for decompression")
-endif()
-
+# Warnings for the project's own code only
+add_library(wikigraph_warnings INTERFACE)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   # Enable all warnings for project's code
   # https://clang.llvm.org/docs/DiagnosticsReference.html
-  target_compile_options(wikigraph PRIVATE 
-    -Weverything 
+  target_compile_options(wikigraph_warnings INTERFACE
+    -Weverything
     -Wno-system-headers        # Ignore warnings from dependencies (marked as system)
     -Wno-c++98-compat          # Ignore warnings from C++98 compatibility
-    -Wno-c++98-compat-pedantic 
+    -Wno-c++98-compat-pedantic
     -Wno-sign-conversion       # Ignore warnings about unsigned to signed conversions
     -Wno-padded                # Ignore warnings about padding in structs
     -Wno-shorten-64-to-32      # Ignore warnings about 64-bit to 32-bit conversions
     -Wno-exit-time-destructors # Ignore warnings about objects that need to persist until the end of the program
     -Wno-global-constructors   # ditto
     -Wno-switch-default        # Handled by the clang-tidy
+    -Wno-thread-safety-negative # Would need every mutex-taking function annotated with REQUIRES(!mutex)
   )
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(wikigraph_warnings INTERFACE -Wall -Wextra -Wpedantic)
+elseif(MSVC)
+  target_compile_definitions(wikigraph_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)  # getenv is not "unsafe" here
 endif()
 
-include(ProcessorCount)
-ProcessorCount(N)
-if(NOT N EQUAL 0)
-    set(CMAKE_BUILD_PARALLEL_LEVEL ${N})
+add_library(wikigraph_core STATIC ${CORE_SOURCES})
+target_include_directories(wikigraph_core PUBLIC src)
+target_link_libraries(wikigraph_core PUBLIC ZLIB::ZLIB PRIVATE wikigraph_warnings)
+if(WIKIGRAPH_PARALLEL_GZIP)
+  target_link_libraries(wikigraph_core PRIVATE rapidgzip::rapidgzip)
+  target_compile_definitions(wikigraph_core PRIVATE WG_PARALLEL_GZIP)
+  # rapidgzip's lookup tables are computed at compile time
+  target_compile_options(wikigraph_core PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/bigobj;/constexpr:steps199000100>")
+endif()
+# std::atomic of the progress structs is not lock-free; GCC/Clang on Linux implement it in libatomic
+if(UNIX AND NOT APPLE)
+  target_link_libraries(wikigraph_core PUBLIC atomic)
+endif()
+
+add_library(wikigraph_fetch STATIC ${FETCH_SOURCES})
+# curl's headers include windows.h, which otherwise defines min and max as macros
+target_compile_definitions(wikigraph_fetch PRIVATE $<$<BOOL:${WIN32}>:NOMINMAX>)
+target_link_libraries(wikigraph_fetch PUBLIC wikigraph_core cpr::cpr spdlog::spdlog PRIVATE wikigraph_warnings)
+
+add_executable(wikigraph ${APP_SOURCES})
+target_link_libraries(wikigraph PRIVATE wikigraph_fetch ftxui::component wikigraph_warnings)  # fetch brings the core
+target_sources(wikigraph PRIVATE ${WG_STATIC_SOURCES})  # from cmake/StaticLinux.cmake
+
+# Unit and integration tests of the core (tests/). Off by default; the CI enables it.
+option(WIKIGRAPH_TESTS "Build the tests (fetches Catch2)" OFF)
+if(WIKIGRAPH_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
 endif()

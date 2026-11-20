@@ -1,0 +1,111 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or pull request cancels the run in progress
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.os }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: Linux,   arch: x86_64, runner: ubuntu-26.04,        preset: release }
+          - { os: Linux,   arch: arm64,  runner: ubuntu-26.04-arm,    preset: release }
+          - { os: macOS,   arch: x86_64, runner: macos-26-intel,      preset: release }
+          - { os: macOS,   arch: arm64,  runner: macos-26,            preset: release }
+          - { os: Windows, arch: x86_64, runner: windows-2025-vs2026, preset: vcpkg-msvc-release, msvc: x64 }
+          - { os: Windows, arch: arm64,  runner: windows-11-arm,      preset: vcpkg-msvc-release, msvc: arm64 }
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # One static executable for every distribution: musl, curl and OpenSSL linked in, built in Alpine. A plain
+      # docker run rather than a job container, because JavaScript actions cannot run in Alpine on arm64 runners.
+      - name: Build (Linux, static)
+        if: runner.os == 'Linux'
+        run: |
+          docker run --rm -e HOST_UID="$(id -u):$(id -g)" -v "$PWD":/src -w /src alpine:3.24 \
+            tools/ci/build-static-linux.sh
+          file build/release/wikigraph | tee /dev/stderr | grep -qE "static(-pie)? linked"
+
+      # The vcpkg presets use Ninja, which needs the compiler environment of a Developer PowerShell; the preset takes
+      # the vcpkg triplet (x64-windows-static or arm64-windows-static) from it
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath
+          cmd /c "`"$vs\VC\Auxiliary\Build\vcvarsall.bat`" ${{ matrix.msvc }} && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') { "$($Matches[1])=$($Matches[2])" >> $env:GITHUB_ENV }
+          }
+          "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+          "VCPKG_BINARY_SOURCES=clear;files,${{ runner.temp }}\vcpkg-cache,readwrite" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force "${{ runner.temp }}\vcpkg-cache" | Out-Null
+
+      # curl and zlib built by vcpkg, reused until vcpkg.json or the baseline changes
+      - name: Cache vcpkg packages (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-${{ matrix.msvc }}-windows-static-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Configure
+        if: runner.os != 'Linux'
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        if: runner.os != 'Linux'
+        run: cmake --build build/${{ matrix.preset }} --parallel
+
+      # The static triplet links curl, zlib and the C runtime in: only Windows' own DLLs may be left
+      - name: Check the DLLs (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dlls = dumpbin /dependents build\${{ matrix.preset }}\wikigraph.exe | Select-String '^\s+\S+\.dll$' |
+            ForEach-Object { $_.Line.Trim() }
+          $dlls
+          $foreign = $dlls | Where-Object { $_ -match '^(api-ms-win-crt|vcruntime|msvcp|ucrtbase|libcurl|zlib)' }
+          if ($foreign) { throw "wikigraph.exe needs DLLs that Windows does not provide: $foreign" }
+
+      # Builds a 6-article wiki and checks the answer, from RAM and from disk (a tiny RAM budget)
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          wikigraph=build/${{ matrix.preset }}/wikigraph
+          python3 tools/ci/make_test_wiki.py testdata || python tools/ci/make_test_wiki.py testdata
+          expected="Start -> Target: 3 clicks, 2 shortest paths"
+          for budget in auto 0.0000001; do
+            "$wikigraph" --data-dir testdata --wiki testwiki-20260101 --ram-budget "$budget" --query Start Target | tee out.txt
+            grep -qF "$expected" out.txt || { echo "::error::expected '$expected' with --ram-budget $budget"; exit 1; }
+          done
+          "$wikigraph" --data-dir testdata --wiki testwiki-20260101 --bench 20
+          "$wikigraph" --help > /dev/null
+
+      - name: Collect the executable
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp build/${{ matrix.preset }}/wikigraph${{ runner.os == 'Windows' && '.exe' || '' }} dist/
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wikigraph-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist/
+          retention-days: 14

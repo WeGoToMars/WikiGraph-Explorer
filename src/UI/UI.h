@@ -1,43 +1,38 @@
 #pragma once
 
 #include <ftxui/component/component_base.hpp>
-#include <functional>
-
-using ftxui::Component;
 
 #include "UIBase.h"
 
-// Timing functions
-/**
- * @brief Sum durations of load stages for display.
- */
-std::chrono::milliseconds total_load_duration(UIState& state);
+namespace ftxui {
+struct Event;
+}
 
-// Utility functions
-/** @brief Kick off the BFS path search using current input. */
-void perform_search(UIState& state);
+namespace wg::app {
 
-/** @brief Download a single file and update progress. */
-void download(UIState& state, WikiFileType type, std::string url);
-/** @brief Download all needed files on a background thread. */
-void download_in_background(UIState& state, DownloadURLs urls);
+// Actions (all on the UI thread)
+/// Download the selected wiki (state.selected.prefix), then build and open its graph.
+void start_download(UIState& state);
+/// Build the graph of state.selected.wiki if needed, then open it under the RAM budget.
+void start_preparing_graph(UIState& state);
+/// Run the path search for the entered titles.
+void handle_search_submit(UIState& state);
+/// Return to the wiki list once no download, build or search is running (no-op unless going back).
+void finish_going_back_if_idle(UIState& state);
 
 // Component creation functions
-Component create_download_ui(UIState& state, std::function<void()> on_start_loading = nullptr);
-Component create_input_ui(UIState& state);
-Component create_results_ui(UIState& state);
-Component create_progress_ui(UIState& state);
-Component create_main_ui(Component& wiki_select_ui, Component& download_ui, Component& input_ui, Component& results_ui,
-                         Component& progress_ui, UIState& state);
+ftxui::Component create_download_ui(UIState& state);
+ftxui::Component create_input_ui(UIState& state);
+ftxui::Component create_results_ui(UIState& state);
+ftxui::Component create_progress_ui(UIState& state);
+ftxui::Component create_main_ui(ftxui::Component& wiki_select_ui, ftxui::Component& download_ui,
+                                ftxui::Component& input_ui, ftxui::Component& results_ui, ftxui::Component& progress_ui,
+                                UIState& state);
 
-// Event handling functions
-/** @brief Handle search submission from the input UI. */
-void handle_search_submit(UIState& state);
-/** @brief Translate library-specific key events into actions. */
-bool handle_key_events(void* event, UIState& state);
+/// Keys that apply across stages (Esc, result scrolling). Returns true if the event was handled.
+bool handle_key_events(const ftxui::Event& event, UIState& state);
 
-// UI entry point
-/** @brief Run the full UI flow including fetching stats. */
-void run_ui(UIState& state, std::function<void()> on_wiki_selected = nullptr);
-/** @brief Run the UI flow with pre-fetched stats. */
-void run_ui_with_stats(UIState& state, std::vector<WikiEntry>& stats);
+/// Run the UI until the user quits. Background work is cancelled and joined before this returns.
+void run_ui(UIState& state);
+
+}  // namespace wg::app

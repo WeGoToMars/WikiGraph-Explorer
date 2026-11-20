@@ -4,38 +4,45 @@
     {
       "name": "debug",
       "displayName": "Debug (macOS/Linux)",
-      "description": "Debug build with sanitizers and debug symbols",
+      "description": "Debug build with AddressSanitizer, UndefinedBehaviorSanitizer and debug symbols",
       "binaryDir": "${sourceDir}/build/debug",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_FLAGS_DEBUG": "-fsanitize=address -fno-omit-frame-pointer -g3 -Wall -Wextra",
-        "CMAKE_C_FLAGS": "-fsanitize=address -fno-omit-frame-pointer -g3 -Wall -Wextra",
-        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address",
+        "CMAKE_CXX_FLAGS_DEBUG": "-fsanitize=address,undefined -fno-omit-frame-pointer -g3",
+        "CMAKE_C_FLAGS_DEBUG": "-fsanitize=address,undefined -fno-omit-frame-pointer -g3",
+        "CMAKE_EXE_LINKER_FLAGS_DEBUG": "-fsanitize=address,undefined",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "environment": {
-        "ASAN_OPTIONS": "detect_leaks=1:abort_on_error=1:print_stacktrace=1",
-        "UBSAN_OPTIONS": "print_stacktrace=1:abort_on_error=1",
-        "TSAN_OPTIONS": "halt_on_error=1"
+        "ASAN_OPTIONS": "abort_on_error=1:print_stacktrace=1",
+        "UBSAN_OPTIONS": "print_stacktrace=1:abort_on_error=1"
       },
       "generator": "Unix Makefiles"
     },
     {
       "name": "profile",
       "displayName": "Profiling (macOS/Linux)",
-      "description": "Profiling build with -O3 optimization and debug symbols",
+      "description": "Release optimisation with debug symbols and frame pointers, for profilers",
       "binaryDir": "${sourceDir}/build/profile",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-g3 -fno-omit-frame-pointer -march=native -mtune=native -O3 -ffast-math -funroll-loops -fstrict-aliasing",
-        "CMAKE_C_FLAGS_RELWITHDEBINFO": "-g3 -fno-omit-frame-pointer",
-        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "-g3",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-O3 -funroll-loops -fstrict-aliasing -DNDEBUG -g3 -fno-omit-frame-pointer",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "-O3 -DNDEBUG -g3 -fno-omit-frame-pointer",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "generator": "Unix Makefiles"
@@ -45,50 +52,89 @@
       "displayName": "Release (macOS/Linux)",
       "description": "Release build with -O3 optimization",
       "binaryDir": "${sourceDir}/build/release",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS_RELEASE": "-Wall -Wextra -Wpedantic -O3 -flto=thin -ffast-math -funroll-loops -fstrict-aliasing -DNDEBUG",
-        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "-flto=thin",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -funroll-loops -fstrict-aliasing -DNDEBUG",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
         "FTXUI_ENABLE_INSTALL": "OFF",
         "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
         "SPDLOG_USE_STD_FORMAT": "ON"
       },
       "generator": "Unix Makefiles"
     },
     {
+      "name": "tsan",
+      "displayName": "ThreadSanitizer (macOS/Linux)",
+      "description": "Optimised debug build with ThreadSanitizer, to find data races between the UI and background threads",
+      "binaryDir": "${sourceDir}/build/tsan",
+      "condition": {
+        "type": "notEquals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_FLAGS_RELWITHDEBINFO": "-fsanitize=thread -O1 -g -fno-omit-frame-pointer",
+        "CMAKE_C_FLAGS_RELWITHDEBINFO": "-fsanitize=thread -O1 -g -fno-omit-frame-pointer",
+        "CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO": "-fsanitize=thread",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=1"
+      },
+      "generator": "Unix Makefiles"
+    },
+    {
+      "name": "windows-msvc",
+      "hidden": true,
+      "description": "MSVC and Ninja, from Visual Studio or a Developer PowerShell for x64 or arm64. vcpkg builds curl and zlib; they and the C runtime are linked in, so the executable needs no DLLs.",
+      "generator": "Ninja",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "$env{VSCMD_ARG_TGT_ARCH}-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+        "FTXUI_ENABLE_INSTALL": "OFF",
+        "FTXUI_QUIET": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON"
+      }
+    },
+    {
       "name": "vcpkg-msvc-debug",
+      "inherits": "windows-msvc",
       "displayName": "VCPKG MSVC Debug",
-      "description": "Windows debug build with MSVC, debug symbols, and sanitizers",
+      "description": "Windows debug build with MSVC, debug symbols and AddressSanitizer",
       "binaryDir": "${sourceDir}/build/vcpkg-msvc-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_FLAGS_DEBUG": "/DEBUG /Zi /RTC1 /W3 /fsanitize=address",
-        "CMAKE_EXE_LINKER_FLAGS_DEBUG": "/DEBUG",
-        "FTXUI_ENABLE_INSTALL": "OFF",
-        "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
-        "SPDLOG_USE_STD_FORMAT": "ON"
-      },
-      "generator": "Ninja",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_CXX_FLAGS_DEBUG": "/Od /Ob0 /W3 /fsanitize=address",
+        "CMAKE_EXE_LINKER_FLAGS_DEBUG": "/DEBUG /INCREMENTAL:NO"
+      }
     },
     {
       "name": "vcpkg-msvc-release",
+      "inherits": "windows-msvc",
       "displayName": "VCPKG MSVC Release",
-      "description": "Windows release build with MSVC and maximum optimization",
+      "description": "Windows release build with MSVC and link-time optimisation",
       "binaryDir": "${sourceDir}/build/vcpkg-msvc-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_CXX_FLAGS_RELEASE": "/Ob2 /Ox /GL /Gy /Gw /fp:fast /W3",
-        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "/LTCG /OPT:REF /OPT:ICF",
-        "FTXUI_ENABLE_INSTALL": "OFF",
-        "FTXUI_QUIET": "ON",
-        "CPR_USE_SYSTEM_CURL": "ON",
-        "SPDLOG_USE_STD_FORMAT": "ON"
-      },
-      "generator": "Ninja",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+        "CMAKE_CXX_FLAGS_RELEASE": "/O2 /Ob3 /Gw /W3 /DNDEBUG",
+        "CMAKE_C_FLAGS_RELEASE": "/O2 /Ob3 /Gw /DNDEBUG",
+        "CMAKE_INTERPROCEDURAL_OPTIMIZATION": "ON",
+        "CMAKE_EXE_LINKER_FLAGS_RELEASE": "/OPT:REF /OPT:ICF"
+      }
     }
   ],
   "buildPresets": [
@@ -106,6 +152,11 @@
       "name": "release",
       "configurePreset": "release",
       "configuration": "Release"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "RelWithDebInfo"
     },
     {
       "name": "vcpkg-msvc-debug",
@@ -135,6 +186,11 @@
       "configuration": "Release"
     },
     {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "RelWithDebInfo"
+    },
+    {
       "name": "vcpkg-msvc-debug",
       "configurePreset": "vcpkg-msvc-debug",
       "configuration": "Debug"
@@ -145,4 +201,4 @@
       "configuration": "Release"
     }
   ]
-} 
+}
