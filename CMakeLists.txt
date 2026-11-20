@@ -26,10 +26,19 @@ endif()
 string(REGEX REPLACE "^(amd64|x64)$" "x86_64" WG_ARCH "${WG_ARCH}")
 string(REGEX REPLACE "^aarch64$" "arm64" WG_ARCH "${WG_ARCH}")
 
+# MSVC reads source files in the system's code page unless told otherwise; they are UTF-8
+add_compile_options("$<$<COMPILE_LANG_AND_ID:C,MSVC>:/utf-8>" "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/utf-8>")
+
 # The dependencies are linked into the executable (cpr would otherwise build shared libraries along with its curl)
 option(BUILD_SHARED_LIBS "Build the dependencies as shared libraries" OFF)
 option(WIKIGRAPH_STATIC "One static executable for every Linux distribution (cmake/StaticLinux.cmake)" OFF)
 
+# FetchContent clones the dependencies with Git, which Visual Studio installs but leaves off the PATH of its
+# Developer PowerShell
+if(CMAKE_HOST_WIN32 AND DEFINED ENV{VSINSTALLDIR})
+  find_program(GIT_EXECUTABLE git
+    PATHS "$ENV{VSINSTALLDIR}Common7/IDE/CommonExtensions/Microsoft/TeamFoundation/Team Explorer/Git/cmd")
+endif()
 include(FetchContent)
 
 if(WIKIGRAPH_STATIC)
@@ -122,6 +131,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   )
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(wikigraph_warnings INTERFACE -Wall -Wextra -Wpedantic)
+elseif(MSVC)
+  target_compile_definitions(wikigraph_warnings INTERFACE _CRT_SECURE_NO_WARNINGS)  # getenv is not "unsafe" here
 endif()
 
 add_library(wikigraph_core STATIC ${CORE_SOURCES})
@@ -139,6 +150,8 @@ if(UNIX AND NOT APPLE)
 endif()
 
 add_library(wikigraph_fetch STATIC ${FETCH_SOURCES})
+# curl's headers include windows.h, which otherwise defines min and max as macros
+target_compile_definitions(wikigraph_fetch PRIVATE $<$<BOOL:${WIN32}>:NOMINMAX>)
 target_link_libraries(wikigraph_fetch PUBLIC wikigraph_core cpr::cpr spdlog::spdlog PRIVATE wikigraph_warnings)
 
 add_executable(wikigraph ${APP_SOURCES})

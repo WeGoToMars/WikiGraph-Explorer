@@ -107,16 +107,16 @@ The result is `build/release/wikigraph`. It replaces musl's slow memory allocato
 For clangd and clang-tidy, link the compile commands of the preset you use into the project root (the link is ignored by git): `ln -s build/debug/compile_commands.json .`. The naming convention is checked by `.clang-tidy`: `clang-tidy -p build/debug src/main.cpp`.
 
 ### Windows
-Open the cloned directory in Visual Studio 2022 or later. VS should automatically recognize it as a CMake project.
-1. Select `vcpkg-msvc-debug` or `vcpkg-msvc-release` configuration
-    - Windows doesn't have `curl` or `zlib` installed by default. If you see a CMake error about not finding them, you can use [vcpkg](https://learn.microsoft.com/en-us/vcpkg/get_started/overview) to install both libraries.
-    - Go to Tools -> Command Line -> Developer Powershell
-    - Run:
-      ```
-      vcpkg install
-      ```
-    - If CMake still can't find packages make sure the VCPKG_ROOT environment variable is set correctly
-2. After CMake has finished running, select startup item wikigraph.exe
+Install [Visual Studio](https://visualstudio.microsoft.com/) 2022 or later with the "Desktop development with C++" workload. It includes everything the build needs: MSVC, CMake, Ninja, Git and vcpkg. On the first configure, vcpkg downloads and builds curl and zlib (a few minutes; later builds reuse them from vcpkg's cache), and CMake downloads NASM for the x64 build.
+
+- **Visual Studio:** open the cloned folder, select the `vcpkg-msvc-release` (or `vcpkg-msvc-debug`) configuration, then the startup item `wikigraph.exe`.
+- **Command line:** in a Developer PowerShell for VS (x64 or arm64):
+  ```
+  cmake --preset vcpkg-msvc-release
+  cmake --build build/vcpkg-msvc-release
+  ```
+
+The build targets the architecture of the developer environment, with the `x64-windows-static` or `arm64-windows-static` vcpkg triplet: curl, zlib and the C runtime are linked in, so `wikigraph.exe` runs on its own, without DLLs or a Visual C++ Redistributable. To use your own vcpkg instead of the one in Visual Studio, set `VCPKG_ROOT` to it.
 
 ### Tests
 The core has unit and integration tests. CMake fetches Catch2 for them, and Python 3 writes the small synthetic wiki they read:

@@ -3,6 +3,7 @@
 #include <zlib.h>
 
 #ifdef WG_PARALLEL_GZIP
+#include <filereader/Standard.hpp>  // StandardFileReader: rapidgzip.hpp does not include it with every compiler
 #include <rapidgzip/rapidgzip.hpp>
 #endif
 
